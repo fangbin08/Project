@@ -12,6 +12,7 @@ import calendar
 import datetime
 import glob
 import pandas as pd
+import matplotlib.pyplot as plt
 # import xlrd
 import gdal
 import fiona
@@ -22,6 +23,15 @@ from rasterio.io import MemoryFile
 from rasterio.transform import from_origin, Affine
 from rasterio.windows import Window
 from rasterio.crs import CRS
+from sklearn.neural_network import MLPRegressor
+from sklearn.neural_network import MLPClassifier
+from sklearn.impute import SimpleImputer
+from sklearn.model_selection import train_test_split
+from sklearn import preprocessing
+from sklearn.metrics import accuracy_score
+from sklearn.metrics import confusion_matrix
+from scipy import stats
+
 # Ignore runtime warning
 import warnings
 warnings.filterwarnings("ignore", category=RuntimeWarning)
@@ -39,6 +49,7 @@ def coordtable_subset(lat_input, lon_input, lat_extent_max, lat_extent_min, lon_
     return lat_output, row_output_ind, lon_output, col_output_ind
 
 ####################################################################################################################################
+
 
 # 0. Input variables
 # Specify file paths
@@ -72,7 +83,7 @@ ndvi_folder = '/MYD13A2/'
 smap_sm_9km_name = ['smap_sm_9km_am', 'smap_sm_9km_pm']
 
 # Generate a sequence of string between start and end dates (Year + DOY)
-start_date = '1981-01-01'
+start_date = '1979-12-31'
 end_date = '2018-12-31'
 year = 2018 - 1981 + 1
 
@@ -135,8 +146,9 @@ f.close()
 
 
 ####################################################################################################################################
-# 1. Check the completeness of downloaded GLDAS files
-os.chdir(path_ltdr)
+# 1.1 Check the completeness of downloaded GLDAS files
+# os.chdir(path_ltdr)
+os.chdir('/Users/binfang/Downloads/Processing/bash_codes/download')
 files = sorted(glob.glob('*.nc4'))
 # date_seq_late = date_seq[6939:]
 files_group = []
@@ -157,6 +169,42 @@ for idt in range(len(files_group)):
     else:
         pass
 
+########################################################################################################################
+# 1.2 Check the completeness of downloaded NLDAS files
+# Generate 24-hour sequence names of each day
+hours_seq = np.arange(24)*100
+hours_seq = [str(hours_seq[x]).zfill(4) for x in range(len(hours_seq))]
+date_seq_24h = ['A' + date_seq[x] + '.' + hours_seq[y] for x in range(len(date_seq)) for y in range(len(hours_seq))]
+
+# List of files to download
+os.chdir('/Users/binfang/Downloads/Processing/bash_codes')
+with open("nldas_data.txt", "r") as ins:
+    url_list = []
+    for line in ins:
+        url_list.append(line)
+ins.close()
+
+year_tocheck = '2018'
+date_seq_24h_ind = [url_list.index(i) for i in url_list if 'A' + year_tocheck in i]
+url_list_1year = [url_list[date_seq_24h_ind[i]] for i in range(len(date_seq_24h_ind))]
+
+os.chdir('/Volumes/MyPassport/SMAP_Project/Datasets/NLDAS/' + year_tocheck)
+download_files = sorted(glob.glob('*.nc4'))
+download_files_list = [download_files[x].split('.')[1] + '.' + download_files[x].split('.')[2] for x in range(len(download_files))]
+
+url_files_list = [url_list_1year[x].split('.')[7] + '.' + url_list_1year[x].split('.')[8] for x in range(len(url_list_1year))]
+
+len(download_files_list) == len(url_files_list)
+
+download_file_miss_ind = [url_files_list.index(i) for i in url_files_list if i not in download_files_list]
+download_file_miss_url = [url_list_1year[download_file_miss_ind[x]] for x in range(len(download_file_miss_ind))]
+
+os.chdir('/Users/binfang/Downloads/Processing/bash_codes/download')
+file = open(year_tocheck + '_miss.txt', 'w')
+with open(year_tocheck + '_miss.txt', 'w') as f:
+    for item in download_file_miss_url:
+        f.write("%s" % item)
+f.close()
 
 ####################################################################################################################################
 # 2. Check the completeness of downloaded MODIS files
@@ -222,197 +270,9 @@ plt.savefig('/Users/binfang/Downloads/piechart.tif')
 plt.close()
 
 
-########################################################################################################################
-# 4.1 Process the DEM data
-
-grd_folders = sorted(glob.glob('/Users/binfang/Downloads/usgs_dem/*/'))
-
-out_ds_list = []
-for ife in range(len(grd_folders)):
-    grd_file_path = sorted([f.path for f in os.scandir(grd_folders[ife]) if f.is_dir()])[0]
-    src_tf = gdal.Open(grd_file_path + '/w001001.adf')
-    src_tf_arr = src_tf.ReadAsArray()
-    src_tf_arr[np.where(src_tf_arr <= 0)] = np.nan
-
-    out_ds = gdal.GetDriverByName('MEM').Create('', src_tf.RasterXSize, src_tf.RasterYSize, 1,  # Number of bands
-                                                gdal.GDT_Float32)
-    out_ds.SetGeoTransform(src_tf.GetGeoTransform())
-    out_ds.SetProjection(src_tf.GetProjection())
-    out_ds.GetRasterBand(1).WriteArray(src_tf_arr)
-
-    out_ds_list.append(out_ds)
-    del(src_tf, out_ds)
-    print(ife)
-
-# Open file and warp the target raster dimensions and geotransform
-out_dem = gdal.Warp('', out_ds_list, format='MEM', dstSRS='EPSG:4326', warpOptions=['SKIP_NOSOURCE=YES'], errorThreshold=0,
-                   resampleAlg=gdal.GRA_NearestNeighbour)
-out_dem_shape = out_dem.ReadAsArray().shape
-
-# Create a raster of EASE grid projection at 1 km resolution
-out_ds_tiff = gdal.GetDriverByName('GTiff').Create('/Users/binfang/Downloads/se_dem.tif',
-     out_dem_shape[1], out_dem_shape[0], 1, gdal.GDT_Float32, ['COMPRESS=LZW', 'TILED=YES'])
-out_ds_tiff.SetGeoTransform(out_dem.GetGeoTransform())
-out_ds_tiff.SetProjection(out_dem.GetProjection())
-out_ds_tiff.GetRasterBand(1).WriteArray(out_dem.ReadAsArray())
-out_ds_tiff.GetRasterBand(1).SetNoDataValue(0)
-out_ds_tiff = None
-
-del(out_ds_list, out_dem, out_ds_tiff)
-
-
-# 4.2 Load in watershed shapefile boundaries and generate masks of the watersheds
-shpf_list = ['basin_1_vec.shp', 'basin_2_vec.shp', 'basin_3_vec.shp', 'basin_4_vec.shp', 'basin_5_vec.shp',
-                 'basin_6_vec.shp', 'basin_7_vec.shp']
-crop_shape_ws_list = []
-for i in range(len(shpf_list)):
-    shapefile_ws = fiona.open('/Volumes/MyPassport/SMAP_Project/Datasets/PRISM/se_watershed/' + shpf_list[i], 'r')
-    crop_shape_ws = [feature["geometry"] for feature in shapefile_ws]
-    crop_shape_ws_list.append(crop_shape_ws)
-    # shp_ws_extent = list(shapefile_ws.bounds)
-
-# 4.3 Extract the annual PRISM data betwen 1942 - 2017
-bil_folders = sorted(glob.glob('/Volumes/MyPassport/SMAP_Project/Datasets/PRISM/Data/*/'))
-
-ds_prism_all = []
-for iyr in range(len(bil_folders)):
-    # bil_path = sorted(os.listdir(bil_folders[iyr])) # subfolder
-    if iyr <= 1980 - 1942:
-        bil_file = bil_folders[iyr] + 'PRISM_ppt_stable_4kmM2_' + str(1942+iyr) + '_bil.bil'
-        ds_prism = rasterio.open(bil_file)
-    else:
-        bil_file = bil_folders[iyr] + 'PRISM_ppt_stable_4kmM3_' + str(1942+iyr) + '_bil.bil'
-        ds_prism = rasterio.open(bil_file)
-
-    ds_prism_all.append(ds_prism)
-
-    print(bil_file)
-    del(bil_file, ds_prism)
-
-
-# 4.4 Mask the PRISM data by watershed shapefiles
-masked_ds_1km_all = []
-for isp in range(len(crop_shape_ws_list)):
-
-    masked_ds_1km_1shp = []
-    for iyr in range(len(ds_prism_all)):
-
-        masked_ds_1km, mask_transform_ds_1km = mask(dataset=ds_prism_all[iyr], shapes=crop_shape_ws_list[isp], crop=True)
-        masked_ds_1km[np.where(masked_ds_1km <= 0)] = np.nan
-        masked_ds_1km = masked_ds_1km.squeeze()
-        masked_ds_1km_1shp.append(masked_ds_1km)
-        del(masked_ds_1km)
-
-    masked_ds_1km_all.append(masked_ds_1km_1shp)
-    del(masked_ds_1km_1shp)
-
-ds_avg_all = []
-ds_max_all = []
-ds_min_all = []
-for isp in range(len(crop_shape_ws_list)):
-    ds_arr = np.array(masked_ds_1km_all[isp])
-    ds_shape = ds_arr.shape
-    ds_arr = np.reshape(ds_arr, (ds_shape[0], ds_shape[1]*ds_shape[2]))
-    ds_avg = np.nanmean(ds_arr, axis=1)
-    ds_max = np.nanmax(ds_arr, axis=1)
-    ds_min = np.nanmin(ds_arr, axis=1)
-    ds_avg_all.append(ds_avg)
-    ds_max_all.append(ds_max)
-    ds_min_all.append(ds_min)
-    del(ds_arr, ds_shape, ds_avg, ds_max, ds_min)
-
-ds_avg_all = np.array(ds_avg_all)
-ds_max_all = np.array(ds_max_all)
-ds_min_all = np.array(ds_min_all)
-
 
 ########################################################################################################################
-# 4.5 Make the tables
-# (4. Ochlock; 1. SR White; 6. CR Bruce; 5. Escambia; 3. Perdido; 2. St Marys; 7. Ap R)
-
-ds_avg = [ds_avg_all[3, :], ds_avg_all[0, :], ds_avg_all[5, :], ds_avg_all[4, :], ds_avg_all[2, :], ds_avg_all[1, :], ds_avg_all[6, :]]
-ds_avg = np.array(ds_avg)
-ds_avg = np.transpose(ds_avg)
-
-ds_max = [ds_max_all[3, :], ds_max_all[0, :], ds_max_all[5, :], ds_max_all[4, :], ds_max_all[2, :], ds_max_all[1, :], ds_max_all[6, :]]
-ds_max = np.array(ds_max)
-ds_max = np.transpose(ds_max)
-
-ds_min = [ds_min_all[3, :], ds_min_all[0, :], ds_min_all[5, :], ds_min_all[4, :], ds_min_all[2, :], ds_min_all[1, :], ds_min_all[6, :]]
-ds_min = np.array(ds_min)
-ds_min = np.transpose(ds_min)
-
-ds_avg_avg = np.nanmean(ds_avg, axis=0)
-ds_avg_std = np.nanstd(ds_avg, axis=0)
-ds_avg_norm = (ds_avg - ds_avg_avg)/ds_avg_std
-
-
-rows = np.arange(1942, 2018)
-rows = [str(i) for i in rows]
-columns = ['Ochlock', 'SR White', 'CR Bruce', 'Escambia', 'Perdido', 'St Marys', 'Ap R']
-
-df_precp_1 = pd.DataFrame(ds_avg, columns=columns, index=rows)
-df_precp_2 = pd.DataFrame(ds_avg_norm, columns=columns, index=rows)
-df_precp_3 = pd.DataFrame(ds_max, columns=columns, index=rows)
-df_precp_4 = pd.DataFrame(ds_min, columns=columns, index=rows)
-
-df_precp_1.to_csv('/Volumes/MyPassport/SMAP_Project/Datasets/PRISM/se_watershed/df_precp_1.csv')
-df_precp_2.to_csv('/Volumes/MyPassport/SMAP_Project/Datasets/PRISM/se_watershed/df_precp_2.csv')
-df_precp_3.to_csv('/Volumes/MyPassport/SMAP_Project/Datasets/PRISM/se_watershed/df_precp_3.csv')
-df_precp_4.to_csv('/Volumes/MyPassport/SMAP_Project/Datasets/PRISM/se_watershed/df_precp_4.csv')
-
-
-# 4.6 Calculate lat/lon tables for PRISM data and find the corresponding indices for the lat/lon
-src_tf = gdal.Open('/Volumes/MyPassport/SMAP_Project/Datasets/PRISM/Data/PRISM_ppt_stable_4kmM2_1942_all_bil/PRISM_ppt_stable_4kmM2_1942_bil.bil')
-
-cellsize = src_tf.GetGeoTransform()[1]
-lon_len = src_tf.RasterXSize
-lat_len = src_tf.RasterYSize
-lon_min = src_tf.GetGeoTransform()[0] + cellsize/2
-lon_max = lon_min + cellsize * (lon_len - 1)
-lat_max = src_tf.GetGeoTransform()[3] - cellsize/2
-lat_min = lat_max - cellsize * (lat_len - 1)
-lat_prism = np.linspace(lat_max, lat_min, lat_len)
-lon_prism = np.linspace(lon_min, lon_max, lon_len)
-
-stn_lat = [30.82, 32.87, 33.45]
-stn_lon = [-84.62, -85.19, -84.82]
-
-stn_row_ind_all = []
-stn_col_ind_all = []
-for ist in range(len(stn_lat)):
-    stn_row_ind = np.argmin(np.absolute(stn_lat[ist] - lat_prism)).item()
-    stn_col_ind = np.argmin(np.absolute(stn_lon[ist] - lon_prism)).item()
-    stn_row_ind_all.append(stn_row_ind)
-    stn_col_ind_all.append(stn_col_ind)
-
-prism_stn_all = []
-for iyr in range(len(ds_prism_all)):
-    prism_mat = ds_prism_all[iyr].read(1)
-    prism_stn = prism_mat[stn_row_ind_all, stn_col_ind_all]
-    prism_stn_all.append(prism_stn)
-prism_stn_all = np.array(prism_stn_all)
-
-# 4.7 make the Map
-timerange = np.arange(1942, 2022, 4)
-xtick = [str(timerange[x]) for x in range(len(timerange))]
-fig = plt.figure(figsize=(13, 8), facecolor='w', edgecolor='k')
-plt.plot(prism_stn_all)
-plt.xticks(np.arange(0, len(timerange)*4, 4), xtick)
-plt.legend(['Bainbridge Intl Paper, GA', 'West Point, GA', 'Newnan 5N, GA'])
-plt.savefig('/Users/binfang/Downloads/Processing/processed_data/prism_prec')
-plt.close()
-
-# Make the tables for the three GA stations
-rows = np.arange(1942, 2018)
-rows = [str(i) for i in rows]
-columns = ['Bainbridge Intl Paper, GA', 'West Point, GA', 'Newnan 5N, GA']
-df_precp_ga = pd.DataFrame(prism_stn_all, columns=columns, index=rows)
-df_precp_ga.to_csv('/Volumes/MyPassport/SMAP_Project/Datasets/PRISM/se_watershed/df_precp_ga.csv')
-
-
-########################################################################################################################
-# 5. Subset the 1 km downscaled SMAP SM data
+# 4. Subset the 1 km downscaled SMAP SM data
 
 # Bounding box of Peru
 # (-18.3479753557, -81.4109425524, -0.0572054988649, -68.6650797187)
@@ -474,6 +334,54 @@ for ife in range(14, len(ismn_land_list)):
 df_land_desc = pd.concat(df_land_all)
 
 
+########################################################################################################################
+## 2. NN training
+data_table = pd.read_excel('/Users/binfang/Downloads/Data File -5-23.xlsx', index_col=None, header=[1])
+data_table = data_table.drop(data_table.index[[54, 78]])
+# data_table = data_table.drop(data_table.index[54:])
+
+x = data_table.drop(['K (m/s)'], axis=1)
+y = data_table['K (m/s)']
+
+# Imputate the input array
+imp_mean = SimpleImputer(missing_values=np.nan, strategy='mean')
+imp_mean.fit(x)
+x = imp_mean.transform(x)
+
+# Normalize input array, and calculate base-10 logarithm of y
+x_norm = preprocessing.normalize(x)
+y_log = np.log10(y)
+
+x_train, x_test, y_train, y_test = train_test_split(x_norm, y_log, test_size=0.25, random_state=42)
 
 
+regr = MLPRegressor(solver='lbfgs', alpha=0.0001, hidden_layer_sizes=(30, 30, 30), max_iter=1000)
+regr.fit(x_train, y_train)
+regr.score(x_train, y_train)
+y_pred = regr.predict(x_test)
 
+
+slope, intercept, r_value, p_value, std_err = stats.linregress(y_test, y_pred)
+plt.scatter(y_test, y_pred)
+plt.plot(y_test, intercept+slope*y_test, '-', color='m')
+plt.xlim(np.min(y_test)*1.05, np.max(y_test)*1.05)
+plt.ylim(np.min(y_test)*1.05, np.max(y_test)*1.05)
+plt.xlabel('Target Test')
+plt.ylabel('Target Pred')
+plt.text(-11.5, -8, 'R=' + str(round(r_value, 3)), ha='center', fontsize=16, fontweight='bold')
+
+
+slope, intercept, r_value, p_value, std_err = stats.linregress(10**y_test, 10**y_pred)
+plt.scatter(10**y_test, 10**y_pred)
+plt.plot(10**y_test, intercept+slope*10**y_test, '-', color='m')
+plt.xlim(np.min(10**y_test)*1.1, np.max(10**y_test)*1.1)
+plt.ylim(np.min(10**y_test)*1.1, np.max(10**y_test)*1.1)
+plt.xlabel('Target Test')
+plt.ylabel('Target Pred')
+
+
+# clf = MLPClassifier(hidden_layer_sizes=(30, 30, 30), max_iter=1000, alpha=0.0001,
+#                      solver='lbfgs', verbose=10,  random_state=42,tol=0.000000001)
+# y_train_arr = np.asarray(y_train, dtype='|S6')
+# clf.fit(x_train, y_train_arr)
+# y_pred = clf.predict(x_test)
