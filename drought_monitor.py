@@ -10,6 +10,8 @@ import fiona
 import rasterio
 import calendar
 import datetime
+import osr
+import pandas as pd
 from rasterio.mask import mask
 from rasterio.warp import calculate_default_transform, reproject, Resampling
 from rasterio.io import MemoryFile
@@ -20,7 +22,7 @@ import cartopy.crs as ccrs
 from cartopy.io.shapereader import Reader
 from cartopy.feature import ShapelyFeature
 from cartopy.mpl.gridliner import LONGITUDE_FORMATTER, LATITUDE_FORMATTER
-
+from itertools import chain
 
 # Ignore runtime warning
 import warnings
@@ -184,15 +186,24 @@ path_lmask = '/Volumes/MyPassport/SMAP_Project/Datasets/Lmask'
 # Path of processed data
 path_procdata = '/Volumes/MyPassport/SMAP_Project/Datasets/processed_data'
 # Path of downscaled SM
-path_smap_sm_ds = '/Users/binfang/Downloads/Processing/Downscale'
+path_smap_sm_ds = '/Volumes/MyPassport/SMAP_Project/Datasets/SMAP/1km/gldas'
 # Path of GIS data
 path_gis_data = '/Users/binfang/Documents/SMAP_Project/data/gis_data'
+# Path of Australia soil data
+path_aus_soil = '/Volumes/MyPassport/SMAP_Project/Datasets/Australia'
 # Path of results
-path_results = '/Users/binfang/Documents/SMAP_Project/results/results_200126'
+path_results = '/Users/binfang/Documents/SMAP_Project/results/results_200605'
 # Path of preview
 path_preview = '/Users/binfang/Documents/SMAP_Project/results/results_191202/preview'
 # Path of swdi data
 path_swdi = '/Users/binfang/Downloads/Processing/Australia/swdi'
+# Path of model data
+path_model = '/Volumes/MyPassport/SMAP_Project/Datasets/model_data'
+# Path of processed data
+path_processed = '/Volumes/MyPassport/SMAP_Project/Datasets/processed_data'
+# Path of downscaled SM
+path_smap_sm_ds = '/Volumes/MyPassport/SMAP_Project/Datasets/SMAP/1km/gldas'
+
 
 lst_folder = '/MYD11A1/'
 ndvi_folder = '/MYD13A2/'
@@ -259,9 +270,9 @@ row_meshgrid_from_25km = row_meshgrid_from_25km.reshape(1, -1)
 
 
 ########################################################################################################################
-# 1 Extract the geographic information of the Australian soil data
+# 1. Extract the geographic information of the Australian soil data
 
-src_tf = gdal.Open('/Volumes/MyPassport/SMAP_Project/Datasets/australian_soil_data/CLY_000_005_EV_N_P_AU_NAT_C_20140801.tif')
+src_tf = gdal.Open(path_aus_soil + '/australia_soil_data/CLY_000_005_EV_N_P_AU_NAT_C_20140801.tif')
 src_tf_arr = src_tf.ReadAsArray().astype(np.float32)
 
 cellsize_aussoil = src_tf.GetGeoTransform()[1]
@@ -273,7 +284,6 @@ lon_aus_max = lon_aus_min + cellsize_aussoil*(size_aus[1]-1)
 
 lat_aus_90m = np.linspace(lat_aus_max, lat_aus_min, size_aus[0])
 lon_aus_90m = np.linspace(lon_aus_min, lon_aus_max, size_aus[1])
-del(src_tf_arr)
 
 # Subset the Australian region
 [lat_aus_ease_1km, row_aus_ease_1km_ind, lon_aus_ease_1km, col_aus_ease_1km_ind] = coordtable_subset\
@@ -301,7 +311,7 @@ f.close()
     find_easeind_lofrhi(lat_aus_90m, lon_aus_90m, interdist_ease_1km,
                         size_world_ease_1km[0], size_world_ease_1km[1], row_aus_ease_1km_ind, col_aus_ease_1km_ind)
 
-os.chdir('/Users/binfang/Downloads/australia_soil_data')
+os.chdir(path_aus_soil + '/australia_soil_data')
 aussoil_files = sorted(glob.glob('*.tif'))
 
 aussoil_1day_init = np.empty([len(lat_aus_ease_1km), len(lon_aus_ease_1km)], dtype='float32')
@@ -326,9 +336,11 @@ for idt in range(len(aussoil_files)):
     print(idt)
 
 # Create a raster of EASE grid projection at 1 km resolution
-out_ds_tiff = gdal.GetDriverByName('GTiff').Create('aussoil_data.tif',
+out_ds_tiff = gdal.GetDriverByName('GTiff').Create(path_aus_soil + '/aussoil_data.tif',
      len(lon_aus_ease_1km), len(lat_aus_ease_1km), len(aussoil_files),  # Number of bands
      gdal.GDT_Float32, ['COMPRESS=LZW', 'TILED=YES'])
+# out_ds_tiff.SetGeoTransform(dst_tran)
+# out_ds_tiff.SetProjection(src_tf.GetProjection())
 
 # Loop write each band to Geotiff file
 for idl in range(len(aussoil_files)):
@@ -337,9 +349,7 @@ for idl in range(len(aussoil_files)):
     out_ds_tiff.GetRasterBand(idl + 1).SetDescription(aussoil_files[idl].split('_')[0])
 out_ds_tiff = None  # close dataset to write to disc
 
-del(aussoil_data)
-
-
+del(aussoil_data, src_tf_arr)
 
 
 ########################################################################################################################
@@ -356,7 +366,7 @@ for x in range(len(varname_list)):
 f.close()
 
 
-aussoil_tf = gdal.Open('/Users/binfang/Downloads/australia_soil_data/aussoil_data.tif')
+aussoil_tf = gdal.Open(path_aus_soil + '/aussoil_data.tif')
 aussoil_arr = aussoil_tf.ReadAsArray().astype(np.float32)
 
 cly = aussoil_arr[0, :, :]/100  # Clay
@@ -376,7 +386,7 @@ theta_awc = theta_fc - theta_wp
 del(aussoil_tf, aussoil_arr)
 
 # Get geographic referencing information of Ausralia
-smap_sm_aus_1km_data = gdal.Open('/Users/binfang/Downloads/Processing/Downscale/2019/smap_sm_1km_ds_2019001.tif')
+smap_sm_aus_1km_data = gdal.Open('/Volumes/MyPassport/SMAP_Project/Datasets/SMAP/1km/gldas/2019/smap_sm_1km_ds_2019001.tif')
 smap_sm_aus_1km_data = smap_sm_aus_1km_data.ReadAsArray().astype(np.float32)[0, :, :]
 output_crs = 'EPSG:6933'
 sub_window_aus_1km = Window(col_aus_ease_1km_ind[0], row_aus_ease_1km_ind[0], len(col_aus_ease_1km_ind), len(row_aus_ease_1km_ind))
@@ -387,13 +397,13 @@ kwargs_1km_sub = {'driver': 'GTiff', 'dtype': 'float32', 'nodata': 0.0, 'width':
 smap_sm_aus_1km_output = sub_n_reproj(smap_sm_aus_1km_data, kwargs_1km_sub, sub_window_aus_1km, output_crs)
 kwargs = smap_sm_aus_1km_output.meta.copy()
 
-# Load in SMAP 1 km SM
 
-for iyr in [4]:#range(len(yearname)):
+# Load in SMAP 1 km SM
+for iyr in range(len(yearname)):
     os.chdir(path_smap_sm_ds + '/' + str(yearname[iyr]))
     tif_files = sorted(glob.glob('*.tif'))
 
-    for idt in range(261, len(tif_files)):
+    for idt in range(len(tif_files)):
         sm_tf = gdal.Open(tif_files[idt])
         sm_arr = sm_tf.ReadAsArray().astype(np.float32)
         sm_arr = sm_arr[:, row_aus_ease_1km_ind[0]:row_aus_ease_1km_ind[-1]+1, col_aus_ease_1km_ind[0]:col_aus_ease_1km_ind[-1]+1]
@@ -410,36 +420,48 @@ for iyr in [4]:#range(len(yearname)):
 
 
 
-# 2.2 Generate the seasonally SWDI maps
+# 2.2 Generate the seasonal SWDI maps
 
 # Extract the days for each season
-for iyr in [4]:  # range(len(yearname)):
-    os.chdir(path_smap_sm_ds + '/' + str(yearname[iyr]))
-    tif_files = sorted(glob.glob('*.tif'))
-    names_daily = np.array([int(os.path.splitext(tif_files[idt])[0].split('_')[-1][-3:]) for idt in range(len(tif_files))])
+seasons_div_norm = np.array([0, 90, 181, 273, 365])
+seasons_div_leap = np.array([0, 91, 182, 274, 366])
+
+ind_season_all_years = []
+for iyr in range(len(yearname)):
+    # os.chdir(path_smap_sm_ds + '/' + str(yearname[iyr]))
+    # tif_files = sorted(glob.glob('*.tif'))
+    # names_daily = np.array([int(os.path.splitext(tif_files[idt])[0].split('_')[-1][-3:]) for idt in range(len(tif_files))])
 
     # Divide by seasons
     os.chdir(path_swdi + '/' + str(yearname[iyr]))
     tif_files = sorted(glob.glob('*.tif'))
-    seasons_div = np.array([0, 90, 181, 273, 365])
-
+    names_daily = np.array([int(os.path.splitext(tif_files[idt])[0].split('_')[-1][-3:]) for idt in range(len(tif_files))])
     ind_season_all = []
-    for i in range(len(seasons_div)-1):
-        ind_season = np.where((names_daily > seasons_div[i]) & (names_daily <= seasons_div[i+1]))[0]
-        ind_season_all.append(ind_season)
-        del(ind_season)
+
+    if iyr != 1:
+        for i in range(len(seasons_div_norm)-1):
+            ind_season = np.where((names_daily > seasons_div_norm[i]) & (names_daily <= seasons_div_norm[i+1]))[0]
+            ind_season_all.append(ind_season)
+            del (ind_season)
+    else:
+        for i in range(len(seasons_div_leap)-1):
+            ind_season = np.where((names_daily > seasons_div_leap[i]) & (names_daily <= seasons_div_leap[i+1]))[0]
+            ind_season_all.append(ind_season)
+            del(ind_season)
+
+    ind_season_all_years.append(ind_season_all)
 
 
 # Average the SWDI data by seasons and map
 swdi_arr_avg_all = np.empty([len(lat_aus_ease_1km), len(lon_aus_ease_1km), 4], dtype='float32')
 swdi_arr_avg_all[:] = np.nan
-for iyr in [4]:#range(len(yearname)):  # range(yearname):
+for iyr in [4]:#range(len(yearname)):
     os.chdir(path_swdi + '/' + str(yearname[iyr]))
     tif_files = sorted(glob.glob('*.tif'))
 
     swdi_arr_avg_all = []
-    for ise in range(len(ind_season_all)):
-        season_list = ind_season_all[ise]
+    for ise in range(len(ind_season_all_years[iyr])):
+        season_list = ind_season_all_years[iyr][ise]
 
         swdi_arr_all = []
         for idt in range(len(season_list)):
@@ -485,7 +507,6 @@ plt.savefig(path_results + '/swdi_aus.png')
 
 
 # 2.4 Make the seasonally averaged SWDI maps in Murray-Darling River basin
-
 # Load in watershed shapefile boundaries
 path_shp_md = path_gis_data + '/wrd_riverbasins/Aqueduct_river_basins_MURRAY - DARLING'
 shp_md_file = "Aqueduct_river_basins_MURRAY - DARLING.shp"
@@ -506,6 +527,7 @@ output_crs = 'EPSG:4326'
 
 
 swdi_arr_avg_all_md = swdi_arr_avg_all[:, row_md_1km_ind[0]:row_md_1km_ind[-1]+1, col_md_1km_ind[0]:col_md_1km_ind[-1]+1]
+
 
 # Subset and reproject the SMAP SM data at watershed
 # 1 km
@@ -560,8 +582,189 @@ plt.savefig(path_results + '/swdi_md.png')
 del(swdi_arr_avg_all, masked_ds_md_1km, masked_ds_md_1km_all)
 
 
+# 2.5.1 Generate the annual averaged SWDI maps
+swdi_arr_allyear = []
+for iyr in range(len(yearname)):
+    os.chdir(path_swdi + '/' + str(yearname[iyr]))
+    tif_files = sorted(glob.glob('*.tif'))
+
+    swdi_arr_1year = []
+    for idt in range(len(tif_files)):
+        swdi_tf = gdal.Open(tif_files[idt])
+        swdi_arr = swdi_tf.ReadAsArray().astype(np.float32)
+        swdi_arr_1year.append(swdi_arr)
+        print(tif_files[idt])
+
+    swdi_arr_1year = np.array(swdi_arr_1year)
+    swdi_arr_avg = np.nanmean(swdi_arr_1year, axis=0)
+
+    swdi_arr_allyear.append(swdi_arr_avg)
+    del(swdi_arr_1year, swdi_arr_avg)
+
+swdi_arr_allyear = np.array(swdi_arr_allyear)
+
+smap_sm_aus_1km_read = rasterio.open(path_swdi + '/2019/aus_swdi_2019001.tif')
+kwargs = smap_sm_aus_1km_read.meta.copy()
+kwargs.update({'count': 5})
+with rasterio.open(path_aus_soil + '/allyear_swdi.tif', 'w', **kwargs) as dst_file:
+    dst_file.write(swdi_arr_allyear)
+
+
+# 2.5.2 Generate the monthly averaged SWDI maps
+swdi_arr_empty = np.empty([len(lat_aus_ease_1km), len(lon_aus_ease_1km)], dtype='float32')
+swdi_arr_empty[:] = np.nan
+smap_sm_aus_1km_read = rasterio.open(path_swdi + '/2019/aus_swdi_2019001.tif')
+
+swdi_arr_allyear = []
+for iyr in range(len(yearname)):
+    os.chdir(path_swdi + '/' + str(yearname[iyr]))
+    tif_files = sorted(glob.glob('*.tif'))
+    tif_files_month = np.asarray([(datetime.datetime(yearname[iyr], 1, 1) +
+                                   datetime.timedelta(int(os.path.basename(tif_files[x]).split('.')[0][-3:]) - 1)).month - 1
+                                  for x in range(len(tif_files))])
+    tif_files_month_ind = [np.where(tif_files_month == x)[0] for x in range(12)]
+
+    swdi_arr_1year = []
+    for imo in range(len(tif_files_month_ind)):
+        swdi_arr_1month = []
+        if len(tif_files_month_ind[imo]) != 0:
+            # tif_files_list_month = tif_files[tif_files_month_ind[imo]]
+            for idt in range(len(tif_files_month_ind[imo])):
+                swdi_tf = gdal.Open(tif_files[tif_files_month_ind[imo][idt]])
+                swdi_arr = swdi_tf.ReadAsArray().astype(np.float32)
+                swdi_arr_1month.append(swdi_arr)
+                print(tif_files[tif_files_month_ind[imo][idt]])
+            swdi_arr_1month = np.stack(swdi_arr_1month, axis=2)
+            swdi_arr_1month = np.nanmean(swdi_arr_1month, axis=2)
+        else:
+            swdi_arr_1month = swdi_arr_empty
+
+        swdi_arr_1year.append(swdi_arr_1month)
+        del(swdi_arr_1month)
+
+    swdi_arr_allyear.append(swdi_arr_1year)
+    del(swdi_arr_1year)
+
+swdi_arr_allyear = np.asarray(swdi_arr_allyear)
+swdi_arr_allyear = np.reshape(swdi_arr_allyear, (60, len(lat_aus_ease_1km), len(lon_aus_ease_1km)))
+
+kwargs = smap_sm_aus_1km_read.meta.copy()
+kwargs.update({'count': 60})
+with rasterio.open(path_aus_soil + '/allyear_swdi_monthly.tif', 'w', **kwargs) as dst_file:
+    dst_file.write(swdi_arr_allyear)
+
+
+
+# 2.6 Make the seasonally averaged SWDI maps in Australia
+shape_world = ShapelyFeature(Reader(path_gis_data + '/gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp').geometries(),
+                                ccrs.PlateCarree(), edgecolor='black', facecolor='none')
+
+xx_wrd, yy_wrd = np.meshgrid(lon_aus_ease_1km, lat_aus_ease_1km) # Create the map matrix
+title_content = ['2015', '2016', '2017', '2018', '2019']
+columns = 2
+rows = 3
+fig = plt.figure(figsize=(10, 8), facecolor='w', edgecolor='k')
+for ipt in range(len(yearname)):
+    ax = fig.add_subplot(rows, columns, ipt+1, projection=ccrs.PlateCarree(),
+                         extent=[lon_aus_ease_1km[0], lon_aus_ease_1km[-1], lat_aus_ease_1km[-1], lat_aus_ease_1km[0]])
+    ax.add_feature(shape_world, linewidth=0.5)
+    img = ax.pcolormesh(xx_wrd, yy_wrd, swdi_arr_allyear[ipt, :, :], vmin=-30, vmax=30, cmap='coolwarm_r')
+    gl = ax.gridlines(draw_labels=True, linestyle='--', linewidth=0.5, alpha=0.5, color='black')
+    gl.xlocator = mticker.MultipleLocator(base=10)
+    gl.ylocator = mticker.MultipleLocator(base=10)
+    gl.xlabel_style = {'size': 9}
+    gl.ylabel_style = {'size': 9}
+    gl.xformatter = LONGITUDE_FORMATTER
+    gl.yformatter = LATITUDE_FORMATTER
+    cbar = plt.colorbar(img, extend='both', orientation='horizontal', aspect=50, pad=0.1)
+    cbar.ax.tick_params(labelsize=9)
+    # cbar.set_label('$\mathregular{(m^3/m^3)}$', fontsize=10, x=0.95)
+    ax.set_title(title_content[ipt], pad=20, fontsize=14, weight='bold')
+plt.subplots_adjust(left=0.1, right=0.9, bottom=0.05, top=0.92, hspace=0.2, wspace=0.2)
+plt.show()
+plt.savefig(path_results + '/swdi_aus_allyear.png')
+
+
+# 2.7 Make the annual averaged SWDI maps in Murray-Darling River basin
+# Load in watershed shapefile boundaries
+path_shp_md = path_gis_data + '/wrd_riverbasins/Aqueduct_river_basins_MURRAY - DARLING'
+shp_md_file = "Aqueduct_river_basins_MURRAY - DARLING.shp"
+shapefile_md = fiona.open(path_shp_md + '/' + shp_md_file, 'r')
+crop_shape_md = [feature["geometry"] for feature in shapefile_md]
+shp_md_extent = list(shapefile_md.bounds)
+output_crs = 'EPSG:4326'
+
+#Subset the region of Murray-Darling
+[lat_1km_md, row_md_1km_ind, lon_1km_md, col_md_1km_ind] = \
+    coordtable_subset(lat_aus_ease_1km, lon_aus_ease_1km, shp_md_extent[3], shp_md_extent[1], shp_md_extent[2], shp_md_extent[0])
+
+[lat_1km_md, row_md_1km_world_ind, lon_1km_md, col_md_1km_world_ind] = \
+    coordtable_subset(lat_world_ease_1km, lon_world_ease_1km, shp_md_extent[3], shp_md_extent[1], shp_md_extent[2], shp_md_extent[0]) # world
+
+[lat_10km_md, row_md_10km_world_ind, lon_10km_md, col_md_10km_world_ind] = \
+    coordtable_subset(lat_world_geo_10km, lon_world_geo_10km, shp_md_extent[3], shp_md_extent[1], shp_md_extent[2], shp_md_extent[0]) # GPM
+
+
+swdi_arr_avg_all_md = swdi_arr_allyear[:, row_md_1km_ind[0]:row_md_1km_ind[-1]+1, col_md_1km_ind[0]:col_md_1km_ind[-1]+1]
+
+
+# Subset and reproject the SMAP SM data at watershed
+# 1 km
+masked_ds_md_1km_all = []
+for n in range(swdi_arr_avg_all_md.shape[0]):
+    sub_window_md_1km = Window(col_md_1km_ind[0], row_md_1km_ind[0], len(col_md_1km_ind), len(row_md_1km_ind))
+    kwargs_1km_sub = {'driver': 'GTiff', 'dtype': 'float32', 'nodata': 0.0, 'width': len(lon_aus_ease_1km),
+                      'height': len(lat_aus_ease_1km), 'count': 1, 'crs': CRS.from_dict(init='epsg:6933'),
+                       'transform': Affine(1000.89502334956, 0.0, 10902749.489346944, 0.0, -1000.89502334956, -1269134.927662937)}
+    smap_sm_md_1km_output = sub_n_reproj(swdi_arr_avg_all_md[n, :, :], kwargs_1km_sub, sub_window_md_1km, output_crs)
+
+    masked_ds_md_1km, mask_transform_ds_md_1km = mask(dataset=smap_sm_md_1km_output, shapes=crop_shape_md, crop=True)
+    masked_ds_md_1km[np.where(masked_ds_md_1km == 0)] = np.nan
+    masked_ds_md_1km = masked_ds_md_1km.squeeze()
+
+    masked_ds_md_1km_all.append(masked_ds_md_1km)
+
+masked_ds_md_1km_all = np.asarray(masked_ds_md_1km_all)
+
+
+# Make the maps at watershed
+feature_shp_md = ShapelyFeature(Reader(path_shp_md + '/' + shp_md_file).geometries(),
+                                ccrs.PlateCarree(), edgecolor='black', facecolor='none')
+extent_md = np.array(smap_sm_md_1km_output.bounds)
+extent_md = extent_md[[0, 2, 1, 3]]
+
+xx_wrd, yy_wrd = np.meshgrid(lon_1km_md, lat_1km_md) # Create the map matrix
+title_content = ['2015', '2016', '2017', '2018', '2019']
+columns = 2
+rows = 3
+fig = plt.figure(figsize=(10, 8), facecolor='w', edgecolor='k')
+for ipt in range(len(yearname)):
+    ax = fig.add_subplot(rows, columns, ipt+1, projection=ccrs.PlateCarree(),
+                         extent=[lon_1km_md[0], lon_1km_md[-1], lat_1km_md[-1], lat_1km_md[0]])
+    ax.add_feature(feature_shp_md)
+    # img = ax.pcolormesh(xx_wrd, yy_wrd, masked_ds_md_1km_all[ipt, :, :], vmin=-30, vmax=30, cmap='coolwarm_r')
+    img = ax.imshow(masked_ds_md_1km_all[ipt, :, :], origin='upper', vmin=-30, vmax=30, cmap='coolwarm_r',
+               extent=extent_md)
+    gl = ax.gridlines(draw_labels=True, linestyle='--', linewidth=0.5, alpha=0.5, color='black')
+    gl.xlocator = mticker.MultipleLocator(base=5)
+    gl.ylocator = mticker.MultipleLocator(base=5)
+    gl.xlabel_style = {'size': 9}
+    gl.ylabel_style = {'size': 9}
+    gl.xformatter = LONGITUDE_FORMATTER
+    gl.yformatter = LATITUDE_FORMATTER
+    cbar = plt.colorbar(img, extend='both', orientation='horizontal', aspect=50, pad=0.1)
+    cbar.ax.tick_params(labelsize=9)
+    # cbar.set_label('$\mathregular{(m^3/m^3)}$', fontsize=10, x=0.95)
+    ax.set_title(title_content[ipt], pad=20, fontsize=14, weight='bold')
+plt.subplots_adjust(left=0.1, right=0.9, bottom=0.05, top=0.92, hspace=0.2, wspace=0.15)
+plt.show()
+plt.savefig(path_results + '/swdi_md_allyear.png')
+
+del(swdi_arr_avg_all, masked_ds_md_1km, masked_ds_md_1km_all)
+
+
 ########################################################################################################################
-# 3. Calculate Soil Moisture Deficit Index (SMDI)
+# 3. Calculate Soil Moisture Deficit Index (SMAI)
 
 row_aus_ind = np.where((row_lmask_ease_25km_ind >= row_aus_ease_25km_ind[0]) & (row_lmask_ease_25km_ind <= row_aus_ease_25km_ind[-1]))
 col_aus_ind = np.where((col_lmask_ease_25km_ind >= col_aus_ease_25km_ind[0]) & (col_lmask_ease_25km_ind <= col_aus_ease_25km_ind[-1]))
@@ -572,10 +775,11 @@ col_aus_ease_1km_ind_mat, row_aus_ease_1km_ind_mat = np.meshgrid(col_aus_ease_1k
 aus_ease_1km_ind_mat = np.array([row_aus_ease_1km_ind_mat.flatten(), col_aus_ease_1km_ind_mat.flatten()])
 aus_ease_1km_ind = np.ravel_multi_index(aus_ease_1km_ind_mat, (len(lat_world_ease_1km), len(lon_world_ease_1km)))
 
+
 # 3.1 Extract the GLDAS grids in Australia and disaggregate to 1 km resolution,
 # and calculate the maximun/minimum/median of each grid of each month
 
-os.chdir(path_procdata)
+os.chdir(path_model + '/gldas')
 ds_model_files = sorted(glob.glob('*ds_model_[0-9]*'))
 
 sm_25km_init = np.empty([len(lat_world_ease_25km), len(lon_world_ease_25km)], dtype='float32')
@@ -608,7 +812,8 @@ for imo in range(len(monthnum)):
     for n in range(3):
 
         mat_output_25km = np.copy(sm_25km_init)
-        mat_output_25km[row_lmask_ease_25km_ind[lmask_ease_25km_aus_ind], col_lmask_ease_25km_ind[lmask_ease_25km_aus_ind]] = sm_gldas_stats[:, n]
+        mat_output_25km[row_lmask_ease_25km_ind[lmask_ease_25km_aus_ind], col_lmask_ease_25km_ind[lmask_ease_25km_aus_ind]] \
+            = sm_gldas_stats[:, n]
 
         sm_1km_output = np.copy(sm_1km_init)
         sm_1km_output_1d = np.array([mat_output_25km[row_meshgrid_from_25km[0, aus_ease_1km_ind[x]],
@@ -616,7 +821,8 @@ for imo in range(len(monthnum)):
                                    for x in range(len(aus_ease_1km_ind))])
         sm_1km_output[0, aus_ease_1km_ind] = sm_1km_output_1d
         sm_1km_output = sm_1km_output.reshape(len(lat_world_ease_1km), len(lon_world_ease_1km))
-        sm_1km_output = sm_1km_output[row_aus_ease_1km_ind[0]:row_aus_ease_1km_ind[-1]+1, col_aus_ease_1km_ind[0]:col_aus_ease_1km_ind[-1]+1]
+        sm_1km_output = sm_1km_output[row_aus_ease_1km_ind[0]:row_aus_ease_1km_ind[-1]+1,
+                        col_aus_ease_1km_ind[0]:col_aus_ease_1km_ind[-1]+1]
 
         sm_1km_aus[:, :, imo*3+n] = sm_1km_output
 
@@ -627,7 +833,7 @@ for imo in range(len(monthnum)):
 
 
 # Save the raster of monthly stats
-out_ds_tiff = gdal.GetDriverByName('GTiff').Create(path_procdata + '/aus_stats.tif',
+out_ds_tiff = gdal.GetDriverByName('GTiff').Create(path_aus_soil + '/aus_stats.tif',
      len(lon_aus_ease_1km), len(lat_aus_ease_1km), sm_1km_aus.shape[2],  # Number of bands
      gdal.GDT_Float32, ['COMPRESS=LZW', 'TILED=YES'])
 
@@ -643,13 +849,14 @@ del(out_ds_tiff)
 # 3.2 Calculate the SMDI by each month
 
 # Load in SMAP 1 km SM and calculate monthly average
-for iyr in [4]:
+for iyr in range(len(yearname)):
     os.chdir(path_smap_sm_ds + '/' + str(yearname[iyr]))
     tif_files = sorted(glob.glob('*.tif'))
 
     # Divide the tif files by month
     tif_files_delta = [int(tif_files[x].split('.')[0][-3:]) - 1 for x in range(len(tif_files))]
-    tif_files_month = [(datetime.date(yearname[iyr], 1, 1) + datetime.timedelta(tif_files_delta[x])).month for x in range(len(tif_files_delta))]
+    tif_files_month = [(datetime.date(yearname[iyr], 1, 1) + datetime.timedelta(tif_files_delta[x])).month
+                       for x in range(len(tif_files_delta))]
     tif_files_month = np.array(tif_files_month)
 
     sm_arr_month_avg_all = np.empty([len(lat_aus_ease_1km), len(lon_aus_ease_1km), len(monthname)], dtype='float32')
@@ -676,7 +883,7 @@ for iyr in [4]:
 
 
     # Save the raster of monthly SM of one year
-    out_ds_tiff = gdal.GetDriverByName('GTiff').Create(path_procdata + '/smap_monthly_sm_' + str(yearname[iyr]) + '.tif',
+    out_ds_tiff = gdal.GetDriverByName('GTiff').Create(path_aus_soil + '/smap_monthly_sm_' + str(yearname[iyr]) + '.tif',
          len(lon_aus_ease_1km), len(lat_aus_ease_1km), len(monthname),  # Number of bands
          gdal.GDT_Float32, ['COMPRESS=LZW', 'TILED=YES'])
 
@@ -691,12 +898,8 @@ for iyr in [4]:
 
 # Load in the SMAP monthly average data and Australian statistical data
 
-aus_smap_sm_monthly = gdal.Open(path_procdata + '/smap_monthly_sm_' + str(yearname[iyr]) + '.tif')
-aus_smap_sm_monthly = aus_smap_sm_monthly.ReadAsArray().astype(np.float32)
-
-aus_stats = gdal.Open(path_procdata + '/aus_stats.tif')
+aus_stats = gdal.Open(path_aus_soil + '/aus_stats.tif')
 aus_stats = aus_stats.ReadAsArray().astype(np.float32)
-
 sm_ind_max = np.arange(0, 36, 3)
 sm_ind_min = np.arange(1, 36, 3)
 sm_ind_median = np.arange(2, 36, 3)
@@ -704,37 +907,75 @@ aus_sm_max = aus_stats[sm_ind_max, :, :]
 aus_sm_min = aus_stats[sm_ind_min, :, :]
 aus_sm_median = aus_stats[sm_ind_median, :, :]
 
-aus_sm_delta = aus_smap_sm_monthly - aus_sm_median
-aus_sm_med_min = aus_sm_median - aus_sm_min
-aus_sm_max_med = aus_sm_max - aus_sm_median
+smai_allyear = []
+for iyr in range(len(yearname)):
+    aus_smap_sm_monthly = gdal.Open(path_aus_soil + '/smap_monthly_sm_' + str(yearname[iyr]) + '.tif')
+    aus_smap_sm_monthly = aus_smap_sm_monthly.ReadAsArray().astype(np.float32)
+
+    aus_sm_delta = aus_smap_sm_monthly - aus_sm_median
+    aus_sm_med_min = aus_sm_median - aus_sm_min
+    aus_sm_max_med = aus_sm_max - aus_sm_median
+
+    # Calculate Soil water deficit
+    sm_defi_mat_init = np.empty([len(lat_aus_ease_1km), len(lon_aus_ease_1km)], dtype='float32')
+    sm_defi_mat_init[:] = np.nan
+    sm_defi_mat_all = np.empty([len(lat_aus_ease_1km), len(lon_aus_ease_1km), len(monthname)], dtype='float32')
+    sm_defi_mat_all[:] = np.nan
+    for imo in range(len(monthname)):
+        sm_defi = np.copy(sm_defi_mat_init)
+        sm_defi_ind = np.where(aus_sm_delta[imo, :, :] <= 0)
+        sm_defi_ind_opp = np.where(aus_sm_delta[imo, :, :] > 0)
+        sm_defi[sm_defi_ind[0], sm_defi_ind[1]] = aus_sm_delta[imo, sm_defi_ind[0], sm_defi_ind[1]] / \
+                                                  aus_sm_med_min[imo, sm_defi_ind[0], sm_defi_ind[1]] * 100
+        sm_defi[sm_defi_ind_opp[0], sm_defi_ind_opp[1]] = aus_sm_delta[imo, sm_defi_ind_opp[0], sm_defi_ind_opp[1]] / \
+                                                  aus_sm_max_med[imo, sm_defi_ind_opp[0], sm_defi_ind_opp[1]] * 100
+        sm_defi_mat_all[:, :, imo] = sm_defi
+        print(imo)
+        del(sm_defi_ind, sm_defi_ind_opp, sm_defi)
+
+    # sm_defi_mat_all[:, :, 6] = sm_defi_mat_all[:, :, 5]
+
+    # Find the first month which is not empty
+    sm_defi_mat_all_avg = np.nanmean(sm_defi_mat_all, axis=0)
+    sm_defi_mat_all_avg = np.nanmean(sm_defi_mat_all_avg, axis=0)
+    sm_defi_mat_all_avg_notnan = np.where(~np.isnan(sm_defi_mat_all_avg))[0][0].item()
+    month_diff = np.setdiff1d(np.arange(12), np.where(~np.isnan(sm_defi_mat_all_avg))[0])
+
+    # Calculate the monthly SMDI
+    smai_all = np.empty([len(lat_aus_ease_1km), len(lon_aus_ease_1km), len(monthname)], dtype='float32')
+    smai_all[:] = np.nan
+    if sm_defi_mat_all_avg_notnan == 0:
+        smai_all[:, :, 0] = sm_defi_mat_all[:, :, 0]/50 # SMAI for the first month
+        if len(month_diff)!=0:
+            sm_defi_mat_all[:, :, month_diff[0]] = sm_defi_mat_all[:, :, month_diff[0]-1]
+        else:
+            pass
+        for imo in range(1, len(monthname)):
+            smai_all[:, :, imo] = 0.5 * smai_all[:, :, imo-1] + sm_defi_mat_all[:, :, imo]/50
+
+    else:
+        smai_all[:, :, sm_defi_mat_all_avg_notnan] = sm_defi_mat_all[:, :, sm_defi_mat_all_avg_notnan] / 50  # SMAI for the first month
+        for imo in range(sm_defi_mat_all_avg_notnan + 1, len(monthname)):
+            smai_all[:, :, imo] = 0.5 * smai_all[:, :, imo - 1] + sm_defi_mat_all[:, :, imo] / 50
+        else:
+            pass
 
 
-# Calculate Soil water deficit
-sm_defi_mat_init = np.empty([len(lat_aus_ease_1km), len(lon_aus_ease_1km)], dtype='float32')
-sm_defi_mat_init[:] = np.nan
-sm_defi_mat_all = np.empty([len(lat_aus_ease_1km), len(lon_aus_ease_1km), len(monthname)], dtype='float32')
-sm_defi_mat_all[:] = np.nan
-for imo in range(len(monthname)):
-    sm_defi = np.copy(sm_defi_mat_init)
-    sm_defi_ind = np.where(aus_sm_delta[imo, :, :] <= 0)
-    sm_defi_ind_opp = np.where(aus_sm_delta[imo, :, :] > 0)
-    sm_defi[sm_defi_ind[0], sm_defi_ind[1]] = aus_sm_delta[imo, sm_defi_ind[0], sm_defi_ind[1]] / \
-                                              aus_sm_med_min[imo, sm_defi_ind[0], sm_defi_ind[1]] * 100
-    sm_defi[sm_defi_ind_opp[0], sm_defi_ind_opp[1]] = aus_sm_delta[imo, sm_defi_ind_opp[0], sm_defi_ind_opp[1]] / \
-                                              aus_sm_max_med[imo, sm_defi_ind_opp[0], sm_defi_ind_opp[1]] * 100
-    sm_defi_mat_all[:, :, imo] = sm_defi
-    print(imo)
-    del(sm_defi_ind, sm_defi_ind_opp, sm_defi)
+    smai_allyear.append(smai_all)
+    print(yearname[iyr])
+    del(aus_smap_sm_monthly, aus_sm_delta, aus_sm_med_min, aus_sm_max_med, sm_defi_mat_all, sm_defi_mat_all_avg,
+        sm_defi_mat_all_avg_notnan, smai_all)
 
-sm_defi_mat_all[:, :, 6] = sm_defi_mat_all[:, :, 5]
+smai_allyear = np.asarray(smai_allyear)
+smai_allyear = np.transpose(smai_allyear, (0, 3, 1, 2))
+smai_allyear = np.reshape(smai_allyear, (60, len(lat_aus_ease_1km), len(lon_aus_ease_1km)))
 
-# Calculate the monthly SMDI
-smai_all = np.empty([len(lat_aus_ease_1km), len(lon_aus_ease_1km), len(monthname)], dtype='float32')
-smai_all[:] = np.nan
-smai_all[:, :, 0] = sm_defi_mat_all[:, :, 0]/50 # SMAI for the first month
+smap_sm_aus_1km_read = rasterio.open(path_swdi + '/2019/aus_swdi_2019001.tif')
+kwargs = smap_sm_aus_1km_read.meta.copy()
+kwargs.update({'count': 60})
+with rasterio.open(path_aus_soil + '/allyear_smai_monthly.tif', 'w', **kwargs) as dst_file:
+    dst_file.write(smai_allyear)
 
-for imo in range(1, len(monthname)):
-    smai_all[:, :, imo] = 0.5 * smai_all[:, :, imo-1] + sm_defi_mat_all[:, :, imo]/50
 
 # Normalize to the range of [-4, 4]
 # smai_all_norm = smai_all * (4 / np.nanmax(np.abs(smai_all)))
@@ -769,7 +1010,39 @@ plt.show()
 plt.savefig(path_results + '/smai_aus.png')
 
 
-# 3.4 Make the seasonally averaged SMAI maps in Murray-Darling River basin
+
+# 3.4 Make the annually averaged SMAI maps in Australia
+shape_world = ShapelyFeature(Reader(path_gis_data + '/gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp').geometries(),
+                                ccrs.PlateCarree(), edgecolor='black', facecolor='none')
+
+xx_wrd, yy_wrd = np.meshgrid(lon_aus_ease_1km, lat_aus_ease_1km) # Create the map matrix
+title_content = ['2015', '2016', '2017', '2018', '2019']
+columns = 2
+rows = 3
+fig = plt.figure(figsize=(10, 8), facecolor='w', edgecolor='k')
+for ipt in range(len(smai_allyear)//12):
+    ax = fig.add_subplot(rows, columns, ipt+1, projection=ccrs.PlateCarree(),
+                         extent=[lon_aus_ease_1km[0], lon_aus_ease_1km[-1], lat_aus_ease_1km[-1], lat_aus_ease_1km[0]])
+    ax.add_feature(shape_world, linewidth=0.5)
+    img = ax.pcolormesh(xx_wrd, yy_wrd, np.nanmean(smai_allyear[ipt*12:ipt*12+11, :, :], axis=0), vmin=-4, vmax=4, cmap='coolwarm_r')
+    gl = ax.gridlines(draw_labels=True, linestyle='--', linewidth=0.5, alpha=0.5, color='black')
+    gl.xlocator = mticker.MultipleLocator(base=10)
+    gl.ylocator = mticker.MultipleLocator(base=10)
+    gl.xlabel_style = {'size': 9}
+    gl.ylabel_style = {'size': 9}
+    gl.xformatter = LONGITUDE_FORMATTER
+    gl.yformatter = LATITUDE_FORMATTER
+    cbar = plt.colorbar(img, extend='both', orientation='horizontal', aspect=50, pad=0.1)
+    cbar.ax.locator_params(nbins=4)
+    cbar.ax.tick_params(labelsize=9)
+    # cbar.set_label('$\mathregular{(m^3/m^3)}$', fontsize=10, x=0.95)
+    ax.set_title(title_content[ipt], pad=20, fontsize=14, weight='bold')
+plt.subplots_adjust(left=0.1, right=0.9, bottom=0.05, top=0.92, hspace=0.2, wspace=0.2)
+plt.show()
+plt.savefig(path_results + '/smai_aus_allyear.png')
+
+
+# 3.5 Make the seasonally averaged SMAI maps in Murray-Darling River basin
 
 # Load in watershed shapefile boundaries
 path_shp_md = path_gis_data + '/wrd_riverbasins/Aqueduct_river_basins_MURRAY - DARLING'
@@ -833,6 +1106,79 @@ plt.subplots_adjust(left=0.1, right=0.9, bottom=0.05, top=0.92, hspace=0.25, wsp
 plt.show()
 plt.savefig(path_results + '/smai_md.png')
 
+
+# 3.6 Make the annually averaged SMAI maps in Murray-Darling River basin
+
+# Load in watershed shapefile boundaries
+path_shp_md = path_gis_data + '/wrd_riverbasins/Aqueduct_river_basins_MURRAY - DARLING'
+shp_md_file = "Aqueduct_river_basins_MURRAY - DARLING.shp"
+shapefile_md = fiona.open(path_shp_md + '/' + shp_md_file, 'r')
+crop_shape_md = [feature["geometry"] for feature in shapefile_md]
+shp_md_extent = list(shapefile_md.bounds)
+output_crs = 'EPSG:4326'
+
+#Subset the region of Murray-Darling using Australia lat/lon
+[lat_1km_md, row_md_1km_ind, lon_1km_md, col_md_1km_ind] = \
+    coordtable_subset(lat_aus_ease_1km, lon_aus_ease_1km, shp_md_extent[3], shp_md_extent[1], shp_md_extent[2], shp_md_extent[0])
+
+smai_allyear_avg = np.array([np.nanmean(smai_allyear[x*12:x*12+11, row_md_1km_ind[0]:row_md_1km_ind[-1]+1,
+                                        col_md_1km_ind[0]:col_md_1km_ind[-1]+1], axis=0) for x in range(len(smai_allyear)//12)])
+# smai_allyear_avg_md = smai_allyear_avg[row_md_1km_ind[0]:row_md_1km_ind[-1]+1, col_md_1km_ind[0]:col_md_1km_ind[-1]+1, :]
+
+#Subset the region of Murray-Darling using World lat/lon
+[lat_1km_md_wrd, row_md_wrd_1km_ind, lon_1km_md_wrd, col_md_wrd_1km_ind] = \
+    coordtable_subset(lat_world_ease_1km, lon_world_ease_1km, shp_md_extent[3], shp_md_extent[1], shp_md_extent[2], shp_md_extent[0])
+
+# Subset and reproject the SMAP SM data at watershed
+# 1 km
+masked_ds_md_1km_all = []
+for n in range(smai_allyear_avg.shape[0]):
+    sub_window_md_1km = Window(col_md_1km_ind[0], row_md_1km_ind[0], len(col_md_1km_ind), len(row_md_1km_ind))
+    kwargs_1km_sub = {'driver': 'GTiff', 'dtype': 'float32', 'nodata': 0.0, 'width': len(lon_aus_ease_1km),
+                      'height': len(lat_aus_ease_1km), 'count': 1, 'crs': CRS.from_dict(init='epsg:6933'),
+                       'transform': Affine(1000.89502334956, 0.0, 10902749.489346944, 0.0, -1000.89502334956, -1269134.927662937)}
+    smap_sm_md_1km_output = sub_n_reproj(smai_allyear_avg[n, :, :], kwargs_1km_sub, sub_window_md_1km, output_crs)
+
+    masked_ds_md_1km, mask_transform_ds_md_1km = mask(dataset=smap_sm_md_1km_output, shapes=crop_shape_md, crop=True)
+    masked_ds_md_1km[np.where(masked_ds_md_1km == 0)] = np.nan
+    masked_ds_md_1km = masked_ds_md_1km.squeeze()
+
+    masked_ds_md_1km_all.append(masked_ds_md_1km)
+
+masked_ds_md_1km_all = np.asarray(masked_ds_md_1km_all)
+
+
+# Make the maps at watershed
+feature_shp_md = ShapelyFeature(Reader(path_shp_md + '/' + shp_md_file).geometries(),
+                                ccrs.PlateCarree(), edgecolor='black', facecolor='none')
+extent_md = np.array(smap_sm_md_1km_output.bounds)
+extent_md = extent_md[[0, 2, 1, 3]]
+
+# xx_wrd, yy_wrd = np.meshgrid(lon_1km_md, lat_1km_md) # Create the map matrix
+title_content = ['2015', '2016', '2017', '2018', '2019']
+columns = 2
+rows = 3
+fig = plt.figure(figsize=(10, 8), facecolor='w', edgecolor='k')
+for ipt in range(len(yearname)):
+    ax = fig.add_subplot(rows, columns, ipt+1, projection=ccrs.PlateCarree(),
+                         extent=[lon_1km_md[0], lon_1km_md[-1], lat_1km_md[-1], lat_1km_md[0]])
+    ax.add_feature(feature_shp_md)
+    img = ax.imshow(masked_ds_md_1km_all[ipt, :, :], origin='upper', vmin=-4, vmax=4, cmap='coolwarm_r',
+               extent=extent_md)
+    gl = ax.gridlines(draw_labels=True, linestyle='--', linewidth=0.5, alpha=0.5, color='black')
+    gl.xlocator = mticker.MultipleLocator(base=5)
+    gl.ylocator = mticker.MultipleLocator(base=5)
+    gl.xlabel_style = {'size': 9}
+    gl.ylabel_style = {'size': 9}
+    gl.xformatter = LONGITUDE_FORMATTER
+    gl.yformatter = LATITUDE_FORMATTER
+    cbar = plt.colorbar(img, extend='both', orientation='horizontal', aspect=50, pad=0.1)
+    cbar.ax.tick_params(labelsize=9)
+    # cbar.set_label('$\mathregular{(m^3/m^3)}$', fontsize=10, x=0.95)
+    ax.set_title(title_content[ipt], pad=20, fontsize=14, weight='bold')
+plt.subplots_adjust(left=0.1, right=0.9, bottom=0.05, top=0.92, hspace=0.2, wspace=0.2)
+plt.show()
+plt.savefig(path_results + '/smai_allyear_md.png')
 
 
 ########################################################################################################################
@@ -925,7 +1271,7 @@ for iyr in [4]:
     sm_stn_all = np.array(sm_stn_all)
 
 # Save variable
-os.chdir(path_procdata)
+os.chdir(path_model)
 var_name = ['sm_stn_all']
 
 with h5py.File('sm_stn_all_2019.hdf5', 'w') as f:
@@ -938,7 +1284,7 @@ sm_stn_avg_all = np.array(sm_stn_avg_all)
 
 
 # 4.3.4 Extract GPM data
-f_gpm = h5py.File(path_procdata + "/gpm_precip_2019.hdf5", "r")
+f_gpm = h5py.File(path_model+ "/gpm_precip_2019.hdf5", "r")
 varname_list_gpm = list(f_gpm.keys())
 
 for x in range(len(varname_list_gpm)):
@@ -1038,8 +1384,9 @@ plt.close(fig)
 ########################################################################################################################
 # 5. Make box-plots for the selected locations
 
-# 5.1 Process the SWDI data
-for iyr in [4]:#range(len(yearname)):  # range(yearname):
+# 5.1 Weekly plots
+# 5.1.1 Process the SWDI data
+for iyr in [4]:#range(len(yearname)):
     os.chdir(path_swdi + '/' + str(yearname[iyr]))
     tif_files = sorted(glob.glob('*.tif'))
 
@@ -1078,7 +1425,7 @@ swdi_md_weekly_spdev_full[swdi_days_ind, ] = swdi_md_weekly_spdev
 swdi_md_weekly_spdev_group = [swdi_md_weekly_spdev_full[x*7:x*7+6, ].ravel() for x in range(365//7)]
 
 
-# 5.2 Load in the world SMAP 1 km SM
+# 5.1.2 Load in the world SMAP 1 km SM
 for iyr in [4]:
     os.chdir(path_smap_sm_ds + '/' + str(yearname[iyr]))
     tif_files = sorted(glob.glob('*.tif'))
@@ -1086,7 +1433,8 @@ for iyr in [4]:
     sm_smap_all = []
     for idt in range(len(tif_files)):
         sm_tf = gdal.Open(tif_files[idt])
-        sm_arr = sm_tf.ReadAsArray()[:, row_md_1km_world_ind[0]:row_md_1km_world_ind[-1]+1, col_md_1km_world_ind[0]:col_md_1km_world_ind[-1]+1]
+        sm_arr = sm_tf.ReadAsArray()[:, row_md_1km_world_ind[0]:row_md_1km_world_ind[-1]+1,
+                 col_md_1km_world_ind[0]:col_md_1km_world_ind[-1]+1]
         sm_arr = np.nanmean(sm_arr, axis=0)
         sm_smap_all.append(sm_arr.ravel())
         print(tif_files[idt])
@@ -1094,7 +1442,7 @@ for iyr in [4]:
     sm_smap_all = np.array(sm_smap_all)
 
 # Save variable
-os.chdir(path_procdata)
+os.chdir(path_model)
 var_name = ['sm_smap_all']
 
 with h5py.File('sm_smap_all_2019.hdf5', 'w') as f:
@@ -1123,8 +1471,8 @@ smap_md_weekly_spdev = np.array(smap_md_weekly_spdev)
 smap_md_weekly_spdev_group = [smap_md_weekly_spdev[x*7:x*7+6, ].ravel() for x in range(365//7)]
 
 
-# 5.3 Extract GPM data
-f_gpm = h5py.File(path_procdata + "/gpm_precip_2019.hdf5", "r")
+# 5.1.3 Extract GPM data
+f_gpm = h5py.File(path_model + "/gpm_precip_2019.hdf5", "r")
 varname_list_gpm = list(f_gpm.keys())
 
 for x in range(len(varname_list_gpm)):
@@ -1153,7 +1501,7 @@ gpm_md_weekly_spdev = np.array(gpm_md_weekly_spdev)
 gpm_md_weekly_spdev_group = [gpm_md_weekly_spdev[x*7:x*7+6, ].ravel() for x in range(365//7)]
 
 
-# 5.4.1 Make the boxplot (absolute values)
+# 5.1.4.1 Make the boxplot (absolute values)
 
 fig = plt.figure(figsize=(12, 8))
 ax = fig.subplots(3, 1)
@@ -1179,7 +1527,7 @@ plt.savefig(path_results + '/boxplot_1' + '.png')
 plt.close(fig)
 
 
-# 5.4.2 Make the boxplot (spatial standard deviation)
+# 5.1.4.2 Make the boxplot (spatial standard deviation)
 
 fig = plt.figure(figsize=(12, 8))
 ax = fig.subplots(3, 1)
@@ -1203,4 +1551,637 @@ fig.text(0.51, 0.01, 'Weeks', ha='center', fontsize=16, fontweight='bold')
 plt.subplots_adjust(left=0.1, right=0.9, bottom=0.1, top=0.92, hspace=0.25, wspace=0.25)
 plt.savefig(path_results + '/boxplot_spdev' + '.png')
 plt.close(fig)
+
+########################################################################################################################
+
+
+
+# swdi_days_ind = [int(tif_files[x].split('.')[0][-3:])-1 for x in range(len(tif_files))]
+#
+# swdi_md_full = np.empty([365, swdi_md_all.shape[1]], dtype='float32')
+# swdi_md_full[:] = np.nan
+# swdi_md_full[swdi_days_ind, :] = swdi_md_all
+# swdi_md_weekly = [swdi_md_full[x*7:x*7+6, :].ravel() for x in range(365//7)]
+#
+# swdi_md_weekly_full = []
+# for n in range(len(swdi_md_weekly)):
+#     swdi_md_array = swdi_md_weekly[n]
+#     swdi_md_array = swdi_md_array[~np.isnan(swdi_md_array)]
+#     swdi_md_weekly_full.append(swdi_md_array)
+#     del(swdi_md_array)
+
+# swdi_monthly = swdi_arr_allyear[:, row_md_1km_ind[0]:row_md_1km_ind[-1]+1, col_md_1km_ind[0]:col_md_1km_ind[-1]+1]
+
+# # Calculate Spatial SpDev of swdi
+# swdi_md_weekly_spdev = [np.sqrt(np.nanmean((swdi_md_allyear[x, :] - np.nanmean(swdi_md_allyear[x, :])) ** 2))
+#                         for x in range(len(swdi_md_allyear))]
+# swdi_md_weekly_spdev = np.array(swdi_md_weekly_spdev)
+# swdi_md_weekly_spdev_full = np.empty([365, ], dtype='float32')
+# swdi_md_weekly_spdev_full[:] = np.nan
+# swdi_md_weekly_spdev_full[swdi_days_ind, ] = swdi_md_weekly_spdev
+# swdi_md_weekly_spdev_group = [swdi_md_weekly_spdev_full[x*7:x*7+6, ].ravel() for x in range(365//7)]
+
+
+# 5.2.2 Load in the world SMAP 1 km SM
+for iyr in [4]:
+    os.chdir(path_smap_sm_ds + '/' + str(yearname[iyr]))
+    tif_files = sorted(glob.glob('*.tif'))
+
+    sm_smap_all = []
+    for idt in range(len(tif_files)):
+        sm_tf = gdal.Open(tif_files[idt])
+        sm_arr = sm_tf.ReadAsArray()[:, row_md_1km_world_ind[0]:row_md_1km_world_ind[-1]+1,
+                 col_md_1km_world_ind[0]:col_md_1km_world_ind[-1]+1]
+        sm_arr = np.nanmean(sm_arr, axis=0)
+        sm_smap_all.append(sm_arr.ravel())
+        print(tif_files[idt])
+        del(sm_arr)
+    sm_smap_all = np.array(sm_smap_all)
+
+# Save variable
+os.chdir(path_model)
+var_name = ['sm_smap_all']
+
+with h5py.File('sm_smap_all_2019.hdf5', 'w') as f:
+    for x in var_name:
+        f.create_dataset(x, data=eval(x))
+f.close()
+
+smap_days_ind = [int(tif_files[x].split('.')[0][-3:])-1 for x in range(len(tif_files))]
+
+smap_md_full = np.empty([365, sm_smap_all.shape[1]], dtype='float32')
+smap_md_full[:] = np.nan
+smap_md_full[smap_days_ind, :] = sm_smap_all
+smap_md_weekly = [smap_md_full[x*7:x*7+6, :].ravel() for x in range(365//7)]
+
+smap_md_weekly_full = []
+for n in range(len(smap_md_weekly)):
+    smap_md_array = smap_md_weekly[n]
+    smap_md_array = smap_md_array[~np.isnan(smap_md_array)]
+    smap_md_weekly_full.append(smap_md_array)
+    del(smap_md_array)
+
+# Calculate Spatial SpDev of SMAP SM
+smap_md_weekly_spdev = [np.sqrt(np.nanmean((smap_md_full[x, :] - np.nanmean(smap_md_full[x, :])) ** 2))
+                        for x in range(len(smap_md_full))]
+smap_md_weekly_spdev = np.array(smap_md_weekly_spdev)
+smap_md_weekly_spdev_group = [smap_md_weekly_spdev[x*7:x*7+6, ].ravel() for x in range(365//7)]
+
+
+
+
+# 5.2.4.1 Make the boxplot (absolute values)
+
+fig = plt.figure(figsize=(12, 8))
+ax = fig.subplots(3, 1)
+ax[0].boxplot(smap_md_weekly_full, 0, '')
+ax[0].set_xticks(np.arange(1, 53, 5))
+ax[0].set_xticklabels(['1', '6', '11', '16', '21', '26', '31', '36', '41', '46', '51'])
+# ax[0].set_title('SM', fontsize=16, position=(0.1, 0.85))
+ax[1].boxplot(swdi_md_weekly_full, 0, '')
+ax[1].set_xticks(np.arange(1, 53, 5))
+ax[1].set_xticklabels(['1', '6', '11', '16', '21', '26', '31', '36', '41', '46', '51'])
+# ax[1].set_title('SWDI', fontsize=15, position=(0.1, 0.85))
+ax[2].boxplot(gpm_md_weekly_full, 0, '')
+ax[2].set_xticks(np.arange(1, 53, 5))
+ax[2].set_xticklabels(['1', '6', '11', '16', '21', '26', '31', '36', '41', '46', '51'])
+# ax[2].set_title('Precipitation', fontsize=15, position=(0.1, 0.85))
+
+fig.text(0.04, 0.12, 'Precipitation', rotation='vertical', fontsize=16, fontweight='bold')
+fig.text(0.04, 0.5, 'SWDI', rotation='vertical', fontsize=16, fontweight='bold')
+fig.text(0.04, 0.78, 'SM', rotation='vertical', fontsize=16, fontweight='bold')
+fig.text(0.51, 0.01, 'Weeks', ha='center', fontsize=16, fontweight='bold')
+plt.subplots_adjust(left=0.1, right=0.9, bottom=0.1, top=0.92, hspace=0.25, wspace=0.25)
+plt.savefig(path_results + '/boxplot_1' + '.png')
+plt.close(fig)
+
+
+# 5.2.4.2 Make the boxplot (spatial standard deviation)
+
+fig = plt.figure(figsize=(12, 8))
+ax = fig.subplots(3, 1)
+ax[0].boxplot(smap_md_weekly_spdev_group, 0, '')
+ax[0].set_xticks(np.arange(1, 53, 5))
+ax[0].set_xticklabels(['1', '6', '11', '16', '21', '26', '31', '36', '41', '46', '51'])
+# ax[0].set_title('SM', fontsize=16, position=(0.1, 0.85))
+ax[1].boxplot(swdi_md_weekly_spdev_group, 0, '')
+ax[1].set_xticks(np.arange(1, 53, 5))
+ax[1].set_xticklabels(['1', '6', '11', '16', '21', '26', '31', '36', '41', '46', '51'])
+# ax[1].set_title('SWDI', fontsize=15, position=(0.1, 0.85))
+ax[2].boxplot(gpm_md_weekly_spdev_group, 0, '')
+ax[2].set_xticks(np.arange(1, 53, 5))
+ax[2].set_xticklabels(['1', '6', '11', '16', '21', '26', '31', '36', '41', '46', '51'])
+# ax[2].set_title('Precipitation', fontsize=15, position=(0.1, 0.85))
+
+fig.text(0.04, 0.1, 'Precipitation($\sigma$)', rotation='vertical', fontsize=16, fontweight='bold')
+fig.text(0.04, 0.47, 'SWDI($\sigma$)', rotation='vertical', fontsize=16, fontweight='bold')
+fig.text(0.04, 0.76, 'SM($\sigma$)', rotation='vertical', fontsize=16, fontweight='bold')
+fig.text(0.51, 0.01, 'Weeks', ha='center', fontsize=16, fontweight='bold')
+plt.subplots_adjust(left=0.1, right=0.9, bottom=0.1, top=0.92, hspace=0.25, wspace=0.25)
+plt.savefig(path_results + '/boxplot_spdev' + '.png')
+plt.close(fig)
+
+########################################################################################################################
+# 6. Validation (Monthly plots)
+
+# 6.1. Compare monthly 1 km SM, in-situ SM, SWDI, SMAI at 19 ISMN sites.
+# 6.1.0. Load the site lat/lon from excel files and Locate the SM positions by lat/lon of in-situ data
+ismn_list = sorted(glob.glob(path_processed + '/[A-Z]*.xlsx'))
+coords_all = []
+df_table_am_all = []
+df_table_pm_all = []
+for ife in [0]:
+    df_table_am = pd.read_excel(ismn_list[ife], index_col=0, sheet_name='AM')
+    df_table_pm = pd.read_excel(ismn_list[ife], index_col=0, sheet_name='PM')
+
+    netname = os.path.basename(ismn_list[ife]).split('_')[1]
+    netname = [netname] * df_table_am.shape[0]
+    coords = df_table_am[['lat', 'lon']]
+    coords_all.append(coords)
+
+    df_table_am_value = df_table_am.iloc[:, :]
+    df_table_am_value.insert(0, 'network', netname)
+    df_table_pm_value = df_table_pm.iloc[:, :]
+    df_table_pm_value.insert(0, 'network', netname)
+    df_table_am_all.append(df_table_am_value)
+    df_table_pm_all.append(df_table_pm_value)
+    del(df_table_am, df_table_pm, df_table_am_value, df_table_pm_value, coords, netname)
+    print(ife)
+
+df_coords = pd.concat(coords_all)
+df_table_am_all = pd.concat(df_table_am_all)
+df_table_pm_all = pd.concat(df_table_pm_all)
+
+# Locate the SM pixel positions
+stn_lat_all = np.array(df_coords['lat'])
+stn_lon_all = np.array(df_coords['lon'])
+
+# Locate positions of in-situ stations using lat/lon tables of Australia
+
+stn_row_1km_ind_all = []
+stn_col_1km_ind_all = []
+for idt in range(len(stn_lat_all)):
+    stn_row_1km_ind = np.argmin(np.absolute(stn_lat_all[idt] - lat_aus_ease_1km)).item()
+    stn_col_1km_ind = np.argmin(np.absolute(stn_lon_all[idt] - lon_aus_ease_1km)).item()
+    stn_row_1km_ind_all.append(stn_row_1km_ind)
+    stn_col_1km_ind_all.append(stn_col_1km_ind)
+    del(stn_row_1km_ind, stn_col_1km_ind)
+
+# Locate positions of in-situ stations using lat/lon tables of the world
+
+stn_row_1km_ind_world_all = []
+stn_col_1km_ind_world_all = []
+for idt in range(len(stn_lat_all)):
+    stn_row_1km_ind = np.argmin(np.absolute(stn_lat_all[idt] - lat_world_ease_1km)).item()
+    stn_col_1km_ind = np.argmin(np.absolute(stn_lon_all[idt] - lon_world_ease_1km)).item()
+    stn_row_1km_ind_world_all.append(stn_row_1km_ind)
+    stn_col_1km_ind_world_all.append(stn_col_1km_ind)
+    del(stn_row_1km_ind, stn_col_1km_ind)
+
+
+# 6.1.1. Calculate the monthly averaged in-situ SM
+monthly_seq = np.reshape(daysofmonth_seq, (1, -1), order='F')
+monthly_seq = monthly_seq[:, 3:] # Remove the first 3 months in 2015
+
+ismn_sm_am_all = df_table_am_all.iloc[:, 3:]
+ismn_sm_pm_all = df_table_pm_all.iloc[:, 3:]
+ismn_sm_all = np.stack((ismn_sm_am_all, ismn_sm_pm_all), axis=2)
+ismn_sm_all = np.nanmean(ismn_sm_all, axis=2)
+monthly_seq_cumsum = np.cumsum(monthly_seq)
+ismn_sm_all_split = np.hsplit(ismn_sm_all, monthly_seq_cumsum) # split by each month
+ismn_sm_monthly = [np.nanmean(ismn_sm_all_split[x], axis=1) for x in range(len(ismn_sm_all_split))]
+ismn_sm_monthly = np.stack(ismn_sm_monthly, axis=1)
+ismn_sm_monthly = ismn_sm_monthly[:, :-1]
+ismn_sm_monthly = np.transpose(ismn_sm_monthly, (1, 0))
+
+# 6.1.2. Extract 1 km SMAP by lat/lon
+smap_ext_allyear = []
+smap_md_allyear = []
+smap_md_spdev_allyear = []
+for iyr in range(len(yearname)):
+    os.chdir(path_smap_sm_ds + '/' + str(yearname[iyr]))
+    tif_files = sorted(glob.glob('*.tif'))
+    tif_files_month = np.asarray([(datetime.datetime(yearname[iyr], 1, 1) +
+                                   datetime.timedelta(int(os.path.basename(tif_files[x]).split('.')[0][-3:]) - 1)).month - 1
+                                  for x in range(len(tif_files))])
+    tif_files_month_ind = [np.where(tif_files_month == x)[0] for x in range(12)]
+
+    smap_ext_1year = []
+    smap_md_1year = []
+    smap_md_spdev_1year = []
+    for imo in range(len(tif_files_month_ind)):
+        smap_ext_1month = []
+        smap_md_1month = []
+        smap_md_spdev_1month = []
+        if len(tif_files_month_ind[imo]) != 0:
+            for idt in range(len(tif_files_month_ind[imo])):
+                smap_file = gdal.Open(tif_files[tif_files_month_ind[imo][idt]])
+                smap_file = smap_file.ReadAsArray().astype(np.float32)
+                smap_ext = smap_file[:, stn_row_1km_ind_world_all, stn_col_1km_ind_world_all]
+                smap_ext = np.nanmean(smap_ext, axis=0)
+                smap_md = smap_file[:, row_md_wrd_1km_ind[0]:row_md_wrd_1km_ind[-1]+1,
+                          col_md_wrd_1km_ind[0]:col_md_wrd_1km_ind[-1]+1]
+                smap_md = np.nanmean(smap_md, axis=0)
+                smap_md = smap_md.ravel()
+                smap_ext_1month.append(smap_ext)
+                smap_md_1month.append(smap_md)
+                print(tif_files[tif_files_month_ind[imo][idt]])
+
+            smap_ext_1month = np.stack(smap_ext_1month, axis=1)
+            smap_ext_1month = np.nanmean(smap_ext_1month, axis=1)
+            smap_md_1month_avg = np.stack(smap_md_1month, axis=0)
+            smap_md_1month_avg = np.nanmean(smap_md_1month_avg, axis=0)
+            smap_md_1month_spdev = \
+                np.array([np.sqrt(np.nanmean((smap_md_1month[x] - np.nanmean(smap_md_1month[x])) ** 2))
+                 for x in range(len(smap_md_1month))])
+
+
+            smap_ext_1year.append(smap_ext_1month)
+            smap_md_1year.append(smap_md_1month_avg)
+            smap_md_spdev_1year.append(smap_md_1month_spdev)
+            del (smap_ext_1month, smap_md_1month, smap_md_1month_avg, smap_md_1month_spdev)
+        else:
+            pass
+            # smap_ext_1month = smap_ext_empty
+            # smap_md_1month = smap_md_empty
+            # smap_md_1month_spdev = smap_md_spdev_empty
+
+    smap_ext_allyear.append(smap_ext_1year)
+    smap_md_allyear.append(smap_md_1year)
+    smap_md_spdev_allyear.append(smap_md_spdev_1year)
+    del(smap_ext_1year, smap_md_1year, smap_md_spdev_1year)
+
+smap_ext_allyear = list(chain.from_iterable(smap_ext_allyear))
+smap_ext_allyear = np.array(smap_ext_allyear)
+smap_md_allyear = list(chain.from_iterable(smap_md_allyear))
+smap_md_allyear = np.array(smap_md_allyear)
+smap_md_spdev_allyear = list(chain.from_iterable(smap_md_spdev_allyear))
+smap_md_spdev_allyear = np.array(smap_md_spdev_allyear)
+
+os.chdir('/Volumes/MyPassport/SMAP_Project/Datasets/Australia')
+var_name = ['smap_sm_spdev_allyear']
+dt = h5py.special_dtype(vlen=np.float32)
+with h5py.File('smap_1km_md_spdev.hdf5', 'w') as f:
+    for x in var_name:
+        f.create_dataset(x, data=eval(x), dtype=dt)
+f.close()
+
+os.chdir('/Volumes/MyPassport/SMAP_Project/Datasets/Australia')
+var_name = ['smap_ismn_allyear', 'smap_sm_allyear']
+with h5py.File('smap_1km_md.hdf5', 'w') as f:
+    for x in var_name:
+        f.create_dataset(x, data=eval(x))
+f.close()
+
+# 6.1.3. Extract the SWDI data / SMAI data
+f = h5py.File("/Volumes/MyPassport/SMAP_Project/Datasets/Australia/smap_1km_md.hdf5", "r")
+varname_list = ['smap_ext_monthly', 'smap_md_monthly']
+for x in range(len(varname_list)):
+    var_obj = f[varname_list[x]][()]
+    exec(varname_list[x] + '= var_obj')
+    del(var_obj)
+f.close()
+
+swdi_tf = gdal.Open('/Volumes/MyPassport/SMAP_Project/Datasets/Australia/allyear_swdi_monthly.tif')
+swdi_monthly = swdi_tf.ReadAsArray().astype(np.float32)
+swdi_monthly = swdi_monthly[:, stn_row_1km_ind_all, stn_col_1km_ind_all]
+
+smai_tf = gdal.Open('/Volumes/MyPassport/SMAP_Project/Datasets/Australia/allyear_smai_monthly.tif')
+smai_monthly = smai_tf.ReadAsArray().astype(np.float32)
+smai_monthly = smai_monthly[:, stn_row_1km_ind_all, stn_col_1km_ind_all]
+
+# Add three lines to the ISMN table
+ismn_sm_monthly = np.concatenate((swdi_monthly[:3, :], ismn_sm_monthly), axis=0)
+
+
+# 6.2. Make time-series plot
+stn_name_all = list(df_coords.index)
+
+# Figure 1
+fig = plt.figure(figsize=(14, 8))
+for ist in range(10):
+    x = ismn_sm_monthly[:, ist]*100
+    y1 = swdi_monthly[:, ist]
+    y2 = smai_monthly[:, ist]
+    z = ismn_sm_monthly[:, ist]
+
+    ax = fig.add_subplot(5, 2, ist+1)
+
+    lns1 = ax.plot(x, c='k', marker='s', label='SM', markersize=4)
+    lns2 = ax.plot(y1, c='m', marker='s', label='SWDI', markersize=4)
+    lns3 = ax.plot(y2, c='b', marker='o', label='SMAI', markersize=4)
+
+    plt.xlim(0, len(x))
+    ax.set_xticks(np.arange(0, 60, 12)+12)
+    ax.set_xticklabels([])
+    labels = ['2015', '2016', '2017', '2018', '2019']
+    mticks = ax.get_xticks()
+    ax.set_xticks(mticks-6, minor=True)
+    ax.tick_params(axis='x', which='minor', length=0)
+    ax.set_xticklabels(labels, minor=True)
+    plt.ylim(-30, 50)
+    ax.set_yticks(np.arange(-30, 70, 20))
+    # plt.grid(linestyle='--')
+    ax.tick_params(axis='y', labelsize=10)
+    ax.text(58, 35, stn_name_all[ist].replace('_', ' '), fontsize=12, horizontalalignment='right')
+
+    # ax2 = ax.twinx()
+    # ax2.set_ylim(0, 0.5, 5)
+    # ax2.invert_yaxis()
+    # lns4 = ax2.bar(np.arange(len(x)), z, width = 0.8, color='royalblue', label='Precip', alpha=0.5)
+    # ax2.tick_params(axis='y', labelsize=10)
+
+# add all legends together
+handles = lns1+lns2+lns3
+labels = [l.get_label() for l in handles]
+
+handles, labels = ax.get_legend_handles_labels()
+plt.gca().legend(handles, labels, loc='center left', bbox_to_anchor=(1.05, 5.6))
+
+fig.text(0.51, 0.01, 'Years', ha='center', fontsize=16, fontweight='bold')
+fig.text(0.04, 0.4, 'Drought Indicators', rotation='vertical', fontsize=16, fontweight='bold')
+plt.subplots_adjust(left=0.1, right=0.9, bottom=0.1, top=0.92, hspace=0.25, wspace=0.25)
+# plt.suptitle('Danube River Basin', fontsize=19, y=0.97, fontweight='bold')
+plt.savefig(path_results + '/t-series1_monthly' + '.png')
+plt.close(fig)
+
+
+# Figure 2
+fig = plt.figure(figsize=(14, 8))
+for ist in range(10, 19):
+    x = ismn_sm_monthly[:, ist]*100
+    y1 = swdi_monthly[:, ist]
+    y2 = smai_monthly[:, ist]
+    z = ismn_sm_monthly[:, ist]
+
+    ax = fig.add_subplot(5, 2, ist-9)
+
+    lns1 = ax.plot(x, c='k', marker='s', label='SM', markersize=4)
+    lns2 = ax.plot(y1, c='m', marker='s', label='SWDI', markersize=4)
+    lns3 = ax.plot(y2, c='b', marker='o', label='SMAI', markersize=4)
+
+    plt.xlim(0, len(x))
+    ax.set_xticks(np.arange(0, 60, 12)+12)
+    ax.set_xticklabels([])
+    labels = ['2015', '2016', '2017', '2018', '2019']
+    mticks = ax.get_xticks()
+    ax.set_xticks(mticks-6, minor=True)
+    ax.tick_params(axis='x', which='minor', length=0)
+    ax.set_xticklabels(labels, minor=True)
+    plt.ylim(-30, 50)
+    ax.set_yticks(np.arange(-30, 70, 20))
+    # plt.grid(linestyle='--')
+    ax.tick_params(axis='y', labelsize=10)
+    ax.text(58, 35, stn_name_all[ist].replace('_', ' '), fontsize=12, horizontalalignment='right')
+
+    # ax2 = ax.twinx()
+    # ax2.set_ylim(0, 0.5, 5)
+    # ax2.invert_yaxis()
+    # lns4 = ax2.bar(np.arange(len(x)), z, width = 0.8, color='royalblue', label='Precip', alpha=0.5)
+    # ax2.tick_params(axis='y', labelsize=10)
+
+# add all legends together
+handles = lns1+lns2+lns3
+labels = [l.get_label() for l in handles]
+
+handles, labels = ax.get_legend_handles_labels()
+plt.gca().legend(handles, labels, loc='center left', bbox_to_anchor=(2.3, 5.6))
+
+fig.text(0.51, 0.01, 'Years', ha='center', fontsize=16, fontweight='bold')
+fig.text(0.04, 0.4, 'Drought Indicators', rotation='vertical', fontsize=16, fontweight='bold')
+plt.subplots_adjust(left=0.1, right=0.9, bottom=0.1, top=0.92, hspace=0.25, wspace=0.25)
+# plt.suptitle('Danube River Basin', fontsize=19, y=0.97, fontweight='bold')
+plt.savefig(path_results + '/t-series2_monthly' + '.png')
+plt.close(fig)
+
+
+
+########################################################################################################################
+# 6.4 Extract data in the Murray-Darling Basin
+
+f1 = h5py.File("/Volumes/MyPassport/SMAP_Project/Datasets/Australia/smap_1km_md_spdev.hdf5", "r")
+varname_list = list(f1.keys())
+for x in range(len(varname_list)):
+    var_obj = f1[varname_list[x]][()]
+    exec(varname_list[x] + '= var_obj')
+    del(var_obj)
+f1.close()
+
+smap_sm_spdev_allyear_ls = \
+    [smap_sm_spdev_allyear[x][~np.isnan(smap_sm_spdev_allyear[x])] for x in range(len(smap_sm_spdev_allyear))]
+smap_sm_spdev_allyear_ls = [[]] * 4 + smap_sm_spdev_allyear_ls
+
+f2 = h5py.File("/Volumes/MyPassport/SMAP_Project/Datasets/Australia/smap_1km_md.hdf5", "r")
+varname_list = list(f2.keys())
+for x in range(len(varname_list)):
+    var_obj = f2[varname_list[x]][()]
+    exec(varname_list[x] + '= var_obj')
+    del(var_obj)
+f2.close()
+
+# smap_ismn_allyear_ls = \
+#     [smap_ismn_allyear[x][~np.isnan(smap_ismn_allyear[x])] for x in range(len(smap_ismn_allyear))]
+smap_sm_allyear_ls = \
+    [smap_sm_allyear[x][~np.isnan(smap_sm_allyear[x])] for x in range(len(smap_sm_allyear))]
+smap_sm_allyear_ls = [[]] * 4 + smap_sm_allyear_ls
+
+# 6.4.1 Process the SWDI data and extract the Murray-Darling Basin
+# # swdi_md_empty = np.empty([len(row_md_1km_ind)*len(col_md_1km_ind)], dtype='float32')
+# # swdi_md_empty[:] = np.nan
+swdi_md_allyear = []
+swdi_md_spdev_allyear = []
+for iyr in range(len(yearname)):
+    os.chdir(path_swdi + '/' + str(yearname[iyr]))
+    tif_files = sorted(glob.glob('*.tif'))
+    tif_files_month = np.asarray([(datetime.datetime(yearname[iyr], 1, 1) +
+                                   datetime.timedelta(int(os.path.basename(tif_files[x]).split('.')[0][-3:]) - 1)).month - 1
+                                  for x in range(len(tif_files))])
+    tif_files_month_ind = [np.where(tif_files_month == x)[0] for x in range(12)]
+
+    swdi_md_1year = []
+    swdi_md_spdev_1year = []
+    for imo in range(len(tif_files_month_ind)):
+        swdi_md_1month = []
+        swdi_md_1month_spdev = []
+        if len(tif_files_month_ind[imo]) != 0:
+            for idt in range(len(tif_files_month_ind[imo])):
+                swdi_tf = gdal.Open(tif_files[tif_files_month_ind[imo][idt]])
+                swdi_md = swdi_tf.ReadAsArray().astype(np.float32)
+                swdi_md = swdi_md[row_md_1km_ind[0]:row_md_1km_ind[-1]+1, col_md_1km_ind[0]:col_md_1km_ind[-1]+1]
+                swdi_md = swdi_md.ravel()
+                swdi_md_1month.append(swdi_md)
+                print(tif_files[tif_files_month_ind[imo][idt]])
+            swdi_md_1month = np.stack(swdi_md_1month, axis=0)
+            swdi_md_1month_avg = np.nanmean(swdi_md_1month, axis=0)
+            swdi_md_1month_spdev = \
+                np.sqrt(np.nanmean((swdi_md_1month - np.nanmean(swdi_md_1month, axis=1).reshape(-1, 1)) ** 2, axis=1))
+
+            # swdi_md_1month = np.stack(swdi_md_1month, axis=2)
+            # swdi_md_1month = np.nanmean(swdi_md_1month, axis=2)
+            swdi_md_1year.append(swdi_md_1month_avg)
+            swdi_md_spdev_1year.append(swdi_md_1month_spdev)
+            del (swdi_md_1month, swdi_md_1month_avg, swdi_md_1month_spdev)
+
+        else:
+            pass
+            # swdi_md_1month_avg = swdi_md_empty
+            # swdi_md_1month_spdev = swdi_md_empty
+
+    swdi_md_allyear.append(swdi_md_1year)
+    swdi_md_spdev_allyear.append(swdi_md_spdev_1year)
+    del(swdi_md_1year, swdi_md_spdev_1year)
+
+swdi_md_allyear = list(chain.from_iterable(swdi_md_allyear))
+swdi_md_allyear_ls = \
+    [swdi_md_allyear[x][~np.isnan(swdi_md_allyear[x])] for x in range(len(swdi_md_allyear))]
+swdi_md_allyear_ls = [[]] * 4 + swdi_md_allyear_ls
+
+swdi_md_spdev_allyear = list(chain.from_iterable(swdi_md_spdev_allyear))
+swdi_md_spdev_allyear_ls = \
+    [swdi_md_spdev_allyear[x][~np.isnan(swdi_md_spdev_allyear[x])] for x in range(len(swdi_md_spdev_allyear))]
+swdi_md_spdev_allyear_ls = [[]] * 4 + swdi_md_spdev_allyear_ls
+
+
+
+# 6.4.2 Extract GPM data
+os.chdir(path_model + '/gpm/')
+gpm_files = sorted(glob.glob('*.hdf5'))
+
+gpm_precip_md_allyear = []
+gpm_precip_md_allyear_spdev = []
+for iyr in range(len(yearname)):
+    f_gpm = h5py.File(gpm_files[iyr], 'r')
+    varname_list_gpm = list(f_gpm.keys())
+    gpm_precip_10km = f_gpm[varname_list_gpm[0]][()]
+    f_gpm.close()
+
+    month_seq = daysofmonth_seq[:, iyr]
+    if iyr==0:
+        month_seq = month_seq[3:, ]
+    else:
+        pass
+
+    month_seq_cumsum = np.cumsum(month_seq)
+
+    gpm_precip_md = gpm_precip_10km[row_md_10km_world_ind[0]:row_md_10km_world_ind[-1]+1,
+                 col_md_10km_world_ind[0]:col_md_10km_world_ind[-1]+1, :]
+    gpm_precip_md = \
+        gpm_precip_md.reshape(gpm_precip_md.shape[0]*gpm_precip_md.shape[1], gpm_precip_md.shape[2])
+    gpm_precip_md_split = np.hsplit(gpm_precip_md, month_seq_cumsum)  # split by each month
+    gpm_precip_md_split = gpm_precip_md_split[:-1]
+    gpm_precip_md_monthly = [np.nanmean(gpm_precip_md_split[x], axis=1) for x in range(len(gpm_precip_md_split))]
+    # gpm_precip_md_monthly = np.stack(gpm_precip_md_monthly, axis=1)
+    # gpm_precip_md_monthly = np.transpose(gpm_precip_md_monthly, (1, 0))
+    gpm_precip_md_monthly_spdev = \
+        [np.sqrt(np.nanmean((gpm_precip_md_split[x] - np.nanmean(gpm_precip_md_split[x], axis=0)) ** 2, axis=0))
+         for x in range(len(gpm_precip_md_split))]
+
+    gpm_precip_md_allyear.append(gpm_precip_md_monthly)
+    gpm_precip_md_allyear_spdev.append(gpm_precip_md_monthly_spdev)
+
+    print(gpm_files[iyr])
+    del(gpm_precip_md_monthly, gpm_precip_md_monthly_spdev, varname_list_gpm, gpm_precip_10km, month_seq,
+        month_seq_cumsum, gpm_precip_md, gpm_precip_md_split)
+
+gpm_precip_md_allyear = list(chain.from_iterable(gpm_precip_md_allyear))
+gpm_precip_md_allyear_spdev = list(chain.from_iterable(gpm_precip_md_allyear_spdev))
+
+gpm_precip_md_allyear = [[]] * 4 + gpm_precip_md_allyear[1:]
+gpm_precip_md_allyear_spdev = [[]] * 4 + gpm_precip_md_allyear_spdev[1:]
+
+# 6.5.1 Make the boxplot (absolute values)
+
+fig = plt.figure(figsize=(13, 8))
+ax = fig.subplots(3, 1)
+ax[0].boxplot(smap_sm_allyear_ls, 0, '')
+ax[0].set_xticks(np.arange(0, 60, 12)+12)
+ax[0].set_xticklabels([])
+labels = ['2015', '2016', '2017', '2018', '2019']
+mticks = ax[0].get_xticks()
+ax[0].set_xticks(mticks - 6, minor=True)
+ax[0].tick_params(axis='x', which='minor', length=0)
+ax[0].set_xticklabels(labels, minor=True)
+# ax[0].set_title('SM', fontsize=16, position=(0.1, 0.85))
+ax[1].boxplot(swdi_md_allyear_ls, 0, '')
+ax[1].set_xticks(np.arange(0, 60, 12)+12)
+ax[1].set_xticklabels([])
+labels = ['2015', '2016', '2017', '2018', '2019']
+mticks = ax[1].get_xticks()
+ax[1].set_xticks(mticks - 6, minor=True)
+ax[1].tick_params(axis='x', which='minor', length=0)
+ax[1].set_xticklabels(labels, minor=True)
+# ax[1].set_title('SWDI', fontsize=15, position=(0.1, 0.85))
+ax[2].boxplot(gpm_precip_md_allyear, 0, '')
+ax[2].set_xticks(np.arange(0, 60, 12)+12)
+ax[2].set_xticklabels([])
+labels = ['2015', '2016', '2017', '2018', '2019']
+mticks = ax[1].get_xticks()
+ax[2].set_xticks(mticks - 6, minor=True)
+ax[2].tick_params(axis='x', which='minor', length=0)
+ax[2].set_xticklabels(labels, minor=True)
+# ax[2].set_title('Precipitation', fontsize=15, position=(0.1, 0.85))
+
+fig.text(0.04, 0.12, 'Precipitation', rotation='vertical', fontsize=16, fontweight='bold')
+fig.text(0.04, 0.5, 'SWDI', rotation='vertical', fontsize=16, fontweight='bold')
+fig.text(0.04, 0.78, 'SM', rotation='vertical', fontsize=16, fontweight='bold')
+fig.text(0.51, 0.01, 'Years', ha='center', fontsize=16, fontweight='bold')
+plt.subplots_adjust(left=0.1, right=0.9, bottom=0.1, top=0.92, hspace=0.25, wspace=0.25)
+plt.savefig(path_results + '/boxplot_allyear_1' + '.png')
+plt.close(fig)
+
+
+
+# 6.5.2 Make the boxplot (spatial standard deviation)
+
+fig = plt.figure(figsize=(13, 8))
+ax = fig.subplots(3, 1)
+ax[0].boxplot(smap_sm_spdev_allyear_ls, 0, '')
+ax[0].set_xticks(np.arange(0, 60, 12)+12)
+ax[0].set_xticklabels([])
+labels = ['2015', '2016', '2017', '2018', '2019']
+mticks = ax[0].get_xticks()
+ax[0].set_xticks(mticks - 6, minor=True)
+ax[0].tick_params(axis='x', which='minor', length=0)
+ax[0].set_xticklabels(labels, minor=True)
+# ax[0].set_title('SM', fontsize=16, position=(0.1, 0.85))
+ax[1].boxplot(swdi_md_spdev_allyear_ls, 0, '')
+ax[1].set_xticks(np.arange(0, 60, 12)+12)
+ax[1].set_xticklabels([])
+labels = ['2015', '2016', '2017', '2018', '2019']
+mticks = ax[1].get_xticks()
+ax[1].set_xticks(mticks - 6, minor=True)
+ax[1].tick_params(axis='x', which='minor', length=0)
+ax[1].set_xticklabels(labels, minor=True)
+# ax[1].set_title('SWDI', fontsize=15, position=(0.1, 0.85))
+ax[2].boxplot(gpm_precip_md_allyear_spdev, 0, '')
+ax[2].set_xticks(np.arange(0, 60, 12)+12)
+ax[2].set_xticklabels([])
+labels = ['2015', '2016', '2017', '2018', '2019']
+mticks = ax[1].get_xticks()
+ax[2].set_xticks(mticks - 6, minor=True)
+ax[2].tick_params(axis='x', which='minor', length=0)
+ax[2].set_xticklabels(labels, minor=True)
+# ax[2].set_title('Precipitation', fontsize=15, position=(0.1, 0.85))
+
+fig.text(0.04, 0.12, 'Precipitation($\sigma$)', rotation='vertical', fontsize=16, fontweight='bold')
+fig.text(0.04, 0.5, 'SWDI($\sigma$)', rotation='vertical', fontsize=16, fontweight='bold')
+fig.text(0.04, 0.78, 'SM($\sigma$)', rotation='vertical', fontsize=16, fontweight='bold')
+fig.text(0.51, 0.01, 'Years', ha='center', fontsize=16, fontweight='bold')
+plt.subplots_adjust(left=0.1, right=0.9, bottom=0.1, top=0.92, hspace=0.25, wspace=0.25)
+plt.savefig(path_results + '/boxplot_allyear_2' + '.png')
+plt.close(fig)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
