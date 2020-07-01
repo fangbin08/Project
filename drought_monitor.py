@@ -479,7 +479,7 @@ for iyr in [4]:#range(len(yearname)):
 swdi_arr_avg_all = np.array(swdi_arr_avg_all)
 
 
-# 2.3 Make the seasonally averaged SWDI maps in Australia
+# 2.3 Make the seasonally averaged SWDI maps in Australia (2019)
 shape_world = ShapelyFeature(Reader(path_gis_data + '/gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp').geometries(),
                                 ccrs.PlateCarree(), edgecolor='black', facecolor='none')
 
@@ -498,15 +498,19 @@ for ipt in range(len(monthname)//3):
     gl.ylocator = mticker.MultipleLocator(base=10)
     gl.xformatter = LONGITUDE_FORMATTER
     gl.yformatter = LATITUDE_FORMATTER
-    cbar = plt.colorbar(img, extend='both', orientation='horizontal', aspect=50, pad=0.1)
+    # cbar = plt.colorbar(img, extend='both', orientation='horizontal', aspect=50, pad=0.1)
     # cbar.set_label('$\mathregular{(m^3/m^3)}$', fontsize=10, x=0.95)
-    ax.set_title(title_content[ipt], pad=20, fontsize=14, weight='bold')
-plt.subplots_adjust(left=0.1, right=0.9, bottom=0.05, top=0.92, hspace=0.25, wspace=0.2)
+    # ax.set_title(title_content[ipt], pad=25, fontsize=16, weight='bold')
+    ax.text(117, -39, title_content[ipt], fontsize=18, horizontalalignment='left',
+            verticalalignment='top', weight='bold')
+plt.subplots_adjust(left=0.04, right=0.88, bottom=0.05, top=0.92, hspace=0.25, wspace=0.25)
+cbar_ax = fig.add_axes([0.93, 0.2, 0.02, 0.6])
+fig.colorbar(img, cax=cbar_ax, extend='both')
 plt.show()
 plt.savefig(path_results + '/swdi_aus.png')
 
 
-# 2.4 Make the seasonally averaged SWDI maps in Murray-Darling River basin
+# 2.4 Make the seasonally averaged SWDI maps in Murray-Darling River basin (2019)
 # Load in watershed shapefile boundaries
 path_shp_md = path_gis_data + '/wrd_riverbasins/Aqueduct_river_basins_MURRAY - DARLING'
 shp_md_file = "Aqueduct_river_basins_MURRAY - DARLING.shp"
@@ -558,7 +562,7 @@ xx_wrd, yy_wrd = np.meshgrid(lon_1km_md, lat_1km_md) # Create the map matrix
 title_content = ['JFM', 'AMJ', 'JAS', 'OND']
 columns = 2
 rows = 2
-fig = plt.figure(figsize=(8, 8), facecolor='w', edgecolor='k')
+fig = plt.figure(figsize=(10, 8), facecolor='w', edgecolor='k')
 for ipt in range(len(monthname)//3):
     ax = fig.add_subplot(rows, columns, ipt+1, projection=ccrs.PlateCarree(),
                          extent=[lon_1km_md[0], lon_1km_md[-1], lat_1km_md[-1], lat_1km_md[0]])
@@ -571,10 +575,13 @@ for ipt in range(len(monthname)//3):
     gl.ylocator = mticker.MultipleLocator(base=5)
     gl.xformatter = LONGITUDE_FORMATTER
     gl.yformatter = LATITUDE_FORMATTER
-    cbar = plt.colorbar(img, extend='both', orientation='horizontal', aspect=50, pad=0.1)
+    # cbar = plt.colorbar(img, extend='both', orientation='horizontal', aspect=50, pad=0.1)
     # cbar.set_label('$\mathregular{(m^3/m^3)}$', fontsize=10, x=0.95)
-    ax.set_title(title_content[ipt], pad=20, fontsize=14, weight='bold')
-plt.subplots_adjust(left=0.1, right=0.9, bottom=0.05, top=0.92, hspace=0.25, wspace=0.2)
+    # ax.set_title(title_content[ipt], pad=25, fontsize=16, weight='bold')
+    ax.text(140.5, -25.5, title_content[ipt], fontsize=18, horizontalalignment='left', verticalalignment='top', weight = 'bold')
+plt.subplots_adjust(left=0.04, right=0.88, bottom=0.05, top=0.92, hspace=0.25, wspace=0.25)
+cbar_ax = fig.add_axes([0.93, 0.2, 0.02, 0.6])
+fig.colorbar(img, cax=cbar_ax, extend='both')
 plt.show()
 plt.savefig(path_results + '/swdi_md.png')
 
@@ -655,7 +662,13 @@ with rasterio.open(path_aus_soil + '/allyear_swdi_monthly.tif', 'w', **kwargs) a
 
 
 
-# 2.6 Make the seasonally averaged SWDI maps in Australia
+# 2.6 Make the annually averaged SWDI maps in Australia
+
+swdi_tf = gdal.Open('/Volumes/MyPassport/SMAP_Project/Datasets/Australia/allyear_swdi_monthly.tif')
+swdi_monthly = swdi_tf.ReadAsArray().astype(np.float32)
+swdi_arr_allyear = np.array([np.nanmean(swdi_monthly[x*12:x*12+12, :, :], axis=0) for x in range(5)])
+# swdi_monthly = swdi_monthly[:, stn_row_1km_ind_all, stn_col_1km_ind_all]
+
 shape_world = ShapelyFeature(Reader(path_gis_data + '/gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp').geometries(),
                                 ccrs.PlateCarree(), edgecolor='black', facecolor='none')
 
@@ -663,7 +676,7 @@ xx_wrd, yy_wrd = np.meshgrid(lon_aus_ease_1km, lat_aus_ease_1km) # Create the ma
 title_content = ['2015', '2016', '2017', '2018', '2019']
 columns = 2
 rows = 3
-fig = plt.figure(figsize=(10, 8), facecolor='w', edgecolor='k')
+fig = plt.figure(figsize=(10, 12), facecolor='w', edgecolor='k')
 for ipt in range(len(yearname)):
     ax = fig.add_subplot(rows, columns, ipt+1, projection=ccrs.PlateCarree(),
                          extent=[lon_aus_ease_1km[0], lon_aus_ease_1km[-1], lat_aus_ease_1km[-1], lat_aus_ease_1km[0]])
@@ -672,15 +685,19 @@ for ipt in range(len(yearname)):
     gl = ax.gridlines(draw_labels=True, linestyle='--', linewidth=0.5, alpha=0.5, color='black')
     gl.xlocator = mticker.MultipleLocator(base=10)
     gl.ylocator = mticker.MultipleLocator(base=10)
-    gl.xlabel_style = {'size': 9}
-    gl.ylabel_style = {'size': 9}
+    gl.xlabel_style = {'size': 11}
+    gl.ylabel_style = {'size': 11}
     gl.xformatter = LONGITUDE_FORMATTER
     gl.yformatter = LATITUDE_FORMATTER
-    cbar = plt.colorbar(img, extend='both', orientation='horizontal', aspect=50, pad=0.1)
-    cbar.ax.tick_params(labelsize=9)
+    # cbar = plt.colorbar(img, extend='both', orientation='horizontal', aspect=50, pad=0.1)
+    # cbar.ax.tick_params(labelsize=9)
     # cbar.set_label('$\mathregular{(m^3/m^3)}$', fontsize=10, x=0.95)
-    ax.set_title(title_content[ipt], pad=20, fontsize=14, weight='bold')
-plt.subplots_adjust(left=0.1, right=0.9, bottom=0.05, top=0.92, hspace=0.2, wspace=0.2)
+    # ax.set_title(title_content[ipt], pad=20, fontsize=14, weight='bold')
+    ax.text(117, -39, title_content[ipt], fontsize=18, horizontalalignment='left',
+            verticalalignment='top', weight='bold')
+plt.subplots_adjust(left=0.04, right=0.88, bottom=0.05, top=0.92, hspace=0.25, wspace=0.25)
+cbar_ax = fig.add_axes([0.93, 0.2, 0.02, 0.6])
+fig.colorbar(img, cax=cbar_ax, extend='both')
 plt.show()
 plt.savefig(path_results + '/swdi_aus_allyear.png')
 
@@ -737,7 +754,7 @@ xx_wrd, yy_wrd = np.meshgrid(lon_1km_md, lat_1km_md) # Create the map matrix
 title_content = ['2015', '2016', '2017', '2018', '2019']
 columns = 2
 rows = 3
-fig = plt.figure(figsize=(10, 8), facecolor='w', edgecolor='k')
+fig = plt.figure(figsize=(10, 12), facecolor='w', edgecolor='k')
 for ipt in range(len(yearname)):
     ax = fig.add_subplot(rows, columns, ipt+1, projection=ccrs.PlateCarree(),
                          extent=[lon_1km_md[0], lon_1km_md[-1], lat_1km_md[-1], lat_1km_md[0]])
@@ -748,15 +765,19 @@ for ipt in range(len(yearname)):
     gl = ax.gridlines(draw_labels=True, linestyle='--', linewidth=0.5, alpha=0.5, color='black')
     gl.xlocator = mticker.MultipleLocator(base=5)
     gl.ylocator = mticker.MultipleLocator(base=5)
-    gl.xlabel_style = {'size': 9}
-    gl.ylabel_style = {'size': 9}
+    gl.xlabel_style = {'size': 11}
+    gl.ylabel_style = {'size': 11}
     gl.xformatter = LONGITUDE_FORMATTER
     gl.yformatter = LATITUDE_FORMATTER
-    cbar = plt.colorbar(img, extend='both', orientation='horizontal', aspect=50, pad=0.1)
-    cbar.ax.tick_params(labelsize=9)
+    # cbar = plt.colorbar(img, extend='both', orientation='horizontal', aspect=50, pad=0.1)
+    # cbar.ax.tick_params(labelsize=9)
     # cbar.set_label('$\mathregular{(m^3/m^3)}$', fontsize=10, x=0.95)
-    ax.set_title(title_content[ipt], pad=20, fontsize=14, weight='bold')
-plt.subplots_adjust(left=0.1, right=0.9, bottom=0.05, top=0.92, hspace=0.2, wspace=0.15)
+    # ax.set_title(title_content[ipt], pad=20, fontsize=14, weight='bold')
+    ax.text(140.5, -25.5, title_content[ipt], fontsize=18, horizontalalignment='left', verticalalignment='top',
+            weight='bold')
+plt.subplots_adjust(left=0.04, right=0.88, bottom=0.05, top=0.92, hspace=0.25, wspace=0.25)
+cbar_ax = fig.add_axes([0.93, 0.2, 0.02, 0.6])
+fig.colorbar(img, cax=cbar_ax, extend='both')
 plt.show()
 plt.savefig(path_results + '/swdi_md_allyear.png')
 
@@ -871,7 +892,8 @@ for iyr in range(len(yearname)):
         for idt in range(len(month_ind)):
             sm_tf = gdal.Open(tif_files[month_ind[idt]])
             sm_arr = sm_tf.ReadAsArray().astype(np.float32)
-            sm_arr = sm_arr[:, row_aus_ease_1km_ind[0]:row_aus_ease_1km_ind[-1]+1, col_aus_ease_1km_ind[0]:col_aus_ease_1km_ind[-1]+1]
+            sm_arr = sm_arr[:, row_aus_ease_1km_ind[0]:row_aus_ease_1km_ind[-1]+1,
+                     col_aus_ease_1km_ind[0]:col_aus_ease_1km_ind[-1]+1]
             sm_arr = np.nanmean(sm_arr, axis=0)
             sm_arr_month[:, :, idt] = sm_arr
             print(tif_files[month_ind[idt]])
@@ -982,7 +1004,14 @@ with rasterio.open(path_aus_soil + '/allyear_smai_monthly.tif', 'w', **kwargs) a
 
 
 ########################################################################################################################
-# 3.3 Make the seasonally averaged SMAI maps in Australia
+# 3.3 Make the seasonally averaged SMAI maps in Australia (2019)
+
+smai_tf = gdal.Open('/Volumes/MyPassport/SMAP_Project/Datasets/Australia/allyear_smai_monthly.tif')
+smai_monthly = smai_tf.ReadAsArray().astype(np.float32)
+# smai_monthly = smai_monthly[:, stn_row_1km_ind_all, stn_col_1km_ind_all]
+smai_all = smai_monthly[48:, :, :]
+smai_all = np.transpose(smai_all, (1, 2, 0))
+
 shape_world = ShapelyFeature(Reader(path_gis_data + '/gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp').geometries(),
                                 ccrs.PlateCarree(), edgecolor='black', facecolor='none')
 
@@ -1001,11 +1030,16 @@ for ipt in range(len(monthname)//3):
     gl.ylocator = mticker.MultipleLocator(base=10)
     gl.xformatter = LONGITUDE_FORMATTER
     gl.yformatter = LATITUDE_FORMATTER
-    cbar = plt.colorbar(img, extend='both', orientation='horizontal', aspect=50, pad=0.1)
-    cbar.ax.locator_params(nbins=4)
+    # cbar = plt.colorbar(img, extend='both', orientation='horizontal', aspect=50, pad=0.1)
+    # cbar.ax.locator_params(nbins=4)
     # cbar.set_label('$\mathregular{(m^3/m^3)}$', fontsize=10, x=0.95)
-    ax.set_title(title_content[ipt], pad=20, fontsize=14, weight='bold')
-plt.subplots_adjust(left=0.1, right=0.9, bottom=0.05, top=0.92, hspace=0.25, wspace=0.2)
+    # ax.set_title(title_content[ipt], pad=25, fontsize=16, weight='bold')
+    ax.text(117, -39, title_content[ipt], fontsize=18, horizontalalignment='left',
+            verticalalignment='top', weight='bold')
+plt.subplots_adjust(left=0.04, right=0.88, bottom=0.05, top=0.92, hspace=0.25, wspace=0.25)
+cbar_ax = fig.add_axes([0.93, 0.2, 0.02, 0.6])
+cbar = fig.colorbar(img, cax=cbar_ax, extend='both')
+cbar_ax.locator_params(nbins=4)
 plt.show()
 plt.savefig(path_results + '/smai_aus.png')
 
@@ -1019,30 +1053,36 @@ xx_wrd, yy_wrd = np.meshgrid(lon_aus_ease_1km, lat_aus_ease_1km) # Create the ma
 title_content = ['2015', '2016', '2017', '2018', '2019']
 columns = 2
 rows = 3
-fig = plt.figure(figsize=(10, 8), facecolor='w', edgecolor='k')
-for ipt in range(len(smai_allyear)//12):
+fig = plt.figure(figsize=(10, 12), facecolor='w', edgecolor='k')
+for ipt in range(len(smai_monthly)//12):
     ax = fig.add_subplot(rows, columns, ipt+1, projection=ccrs.PlateCarree(),
                          extent=[lon_aus_ease_1km[0], lon_aus_ease_1km[-1], lat_aus_ease_1km[-1], lat_aus_ease_1km[0]])
     ax.add_feature(shape_world, linewidth=0.5)
-    img = ax.pcolormesh(xx_wrd, yy_wrd, np.nanmean(smai_allyear[ipt*12:ipt*12+11, :, :], axis=0), vmin=-4, vmax=4, cmap='coolwarm_r')
+    img = ax.pcolormesh(xx_wrd, yy_wrd, np.nanmean(smai_monthly[ipt*12:ipt*12+11, :, :], axis=0), vmin=-4, vmax=4, cmap='coolwarm_r')
     gl = ax.gridlines(draw_labels=True, linestyle='--', linewidth=0.5, alpha=0.5, color='black')
     gl.xlocator = mticker.MultipleLocator(base=10)
     gl.ylocator = mticker.MultipleLocator(base=10)
-    gl.xlabel_style = {'size': 9}
-    gl.ylabel_style = {'size': 9}
+    gl.xlabel_style = {'size': 11}
+    gl.ylabel_style = {'size': 11}
     gl.xformatter = LONGITUDE_FORMATTER
     gl.yformatter = LATITUDE_FORMATTER
-    cbar = plt.colorbar(img, extend='both', orientation='horizontal', aspect=50, pad=0.1)
-    cbar.ax.locator_params(nbins=4)
-    cbar.ax.tick_params(labelsize=9)
+    # cbar = plt.colorbar(img, extend='both', orientation='horizontal', aspect=50, pad=0.1)
+    # cbar.ax.locator_params(nbins=4)
+    # cbar.ax.tick_params(labelsize=9)
     # cbar.set_label('$\mathregular{(m^3/m^3)}$', fontsize=10, x=0.95)
-    ax.set_title(title_content[ipt], pad=20, fontsize=14, weight='bold')
-plt.subplots_adjust(left=0.1, right=0.9, bottom=0.05, top=0.92, hspace=0.2, wspace=0.2)
+    # ax.set_title(title_content[ipt], pad=20, fontsize=14, weight='bold')
+    ax.text(117, -39, title_content[ipt], fontsize=18, horizontalalignment='left',
+            verticalalignment='top', weight='bold')
+plt.subplots_adjust(left=0.04, right=0.88, bottom=0.05, top=0.92, hspace=0.25, wspace=0.25)
+cbar_ax = fig.add_axes([0.93, 0.2, 0.02, 0.6])
+cbar = fig.colorbar(img, cax=cbar_ax, extend='both')
+cbar.ax.locator_params(nbins=4)
 plt.show()
 plt.savefig(path_results + '/smai_aus_allyear.png')
 
 
-# 3.5 Make the seasonally averaged SMAI maps in Murray-Darling River basin
+
+# 3.5 Make the seasonally averaged SMAI maps in Murray-Darling River basin (2019)
 
 # Load in watershed shapefile boundaries
 path_shp_md = path_gis_data + '/wrd_riverbasins/Aqueduct_river_basins_MURRAY - DARLING'
@@ -1087,7 +1127,7 @@ extent_md = extent_md[[0, 2, 1, 3]]
 title_content = ['JFM', 'AMJ', 'JAS', 'OND']
 columns = 2
 rows = 2
-fig = plt.figure(figsize=(8, 8), facecolor='w', edgecolor='k')
+fig = plt.figure(figsize=(10, 8), facecolor='w', edgecolor='k')
 for ipt in range(len(monthname)//3):
     ax = fig.add_subplot(rows, columns, ipt+1, projection=ccrs.PlateCarree(),
                          extent=[lon_1km_md[0], lon_1km_md[-1], lat_1km_md[-1], lat_1km_md[0]])
@@ -1099,10 +1139,15 @@ for ipt in range(len(monthname)//3):
     gl.ylocator = mticker.MultipleLocator(base=5)
     gl.xformatter = LONGITUDE_FORMATTER
     gl.yformatter = LATITUDE_FORMATTER
-    cbar = plt.colorbar(img, extend='both', orientation='horizontal', aspect=50, pad=0.1)
+    # cbar = plt.colorbar(img, extend='both', orientation='horizontal', aspect=50, pad=0.1)
     # cbar.set_label('$\mathregular{(m^3/m^3)}$', fontsize=10, x=0.95)
-    ax.set_title(title_content[ipt], pad=20, fontsize=14, weight='bold')
-plt.subplots_adjust(left=0.1, right=0.9, bottom=0.05, top=0.92, hspace=0.25, wspace=0.2)
+    # ax.set_title(title_content[ipt], pad=25, fontsize=16, weight='bold')
+    ax.text(140.5, -25.5, title_content[ipt], fontsize=18, horizontalalignment='left',
+            verticalalignment='top', weight='bold')
+plt.subplots_adjust(left=0.04, right=0.88, bottom=0.05, top=0.92, hspace=0.25, wspace=0.25)
+cbar_ax = fig.add_axes([0.93, 0.2, 0.02, 0.6])
+cbar = fig.colorbar(img, cax=cbar_ax, extend='both')
+cbar.ax.locator_params(nbins=4)
 plt.show()
 plt.savefig(path_results + '/smai_md.png')
 
@@ -1121,9 +1166,9 @@ output_crs = 'EPSG:4326'
 [lat_1km_md, row_md_1km_ind, lon_1km_md, col_md_1km_ind] = \
     coordtable_subset(lat_aus_ease_1km, lon_aus_ease_1km, shp_md_extent[3], shp_md_extent[1], shp_md_extent[2], shp_md_extent[0])
 
-smai_allyear_avg = np.array([np.nanmean(smai_allyear[x*12:x*12+11, row_md_1km_ind[0]:row_md_1km_ind[-1]+1,
-                                        col_md_1km_ind[0]:col_md_1km_ind[-1]+1], axis=0) for x in range(len(smai_allyear)//12)])
-# smai_allyear_avg_md = smai_allyear_avg[row_md_1km_ind[0]:row_md_1km_ind[-1]+1, col_md_1km_ind[0]:col_md_1km_ind[-1]+1, :]
+smai_monthly_avg = np.array([np.nanmean(smai_monthly[x*12:x*12+11, row_md_1km_ind[0]:row_md_1km_ind[-1]+1,
+                                        col_md_1km_ind[0]:col_md_1km_ind[-1]+1], axis=0) for x in range(len(smai_monthly)//12)])
+# smai_monthly_avg_md = smai_monthly_avg[row_md_1km_ind[0]:row_md_1km_ind[-1]+1, col_md_1km_ind[0]:col_md_1km_ind[-1]+1, :]
 
 #Subset the region of Murray-Darling using World lat/lon
 [lat_1km_md_wrd, row_md_wrd_1km_ind, lon_1km_md_wrd, col_md_wrd_1km_ind] = \
@@ -1132,12 +1177,12 @@ smai_allyear_avg = np.array([np.nanmean(smai_allyear[x*12:x*12+11, row_md_1km_in
 # Subset and reproject the SMAP SM data at watershed
 # 1 km
 masked_ds_md_1km_all = []
-for n in range(smai_allyear_avg.shape[0]):
+for n in range(smai_monthly_avg.shape[0]):
     sub_window_md_1km = Window(col_md_1km_ind[0], row_md_1km_ind[0], len(col_md_1km_ind), len(row_md_1km_ind))
     kwargs_1km_sub = {'driver': 'GTiff', 'dtype': 'float32', 'nodata': 0.0, 'width': len(lon_aus_ease_1km),
                       'height': len(lat_aus_ease_1km), 'count': 1, 'crs': CRS.from_dict(init='epsg:6933'),
                        'transform': Affine(1000.89502334956, 0.0, 10902749.489346944, 0.0, -1000.89502334956, -1269134.927662937)}
-    smap_sm_md_1km_output = sub_n_reproj(smai_allyear_avg[n, :, :], kwargs_1km_sub, sub_window_md_1km, output_crs)
+    smap_sm_md_1km_output = sub_n_reproj(smai_monthly_avg[n, :, :], kwargs_1km_sub, sub_window_md_1km, output_crs)
 
     masked_ds_md_1km, mask_transform_ds_md_1km = mask(dataset=smap_sm_md_1km_output, shapes=crop_shape_md, crop=True)
     masked_ds_md_1km[np.where(masked_ds_md_1km == 0)] = np.nan
@@ -1158,7 +1203,7 @@ extent_md = extent_md[[0, 2, 1, 3]]
 title_content = ['2015', '2016', '2017', '2018', '2019']
 columns = 2
 rows = 3
-fig = plt.figure(figsize=(10, 8), facecolor='w', edgecolor='k')
+fig = plt.figure(figsize=(10, 12), facecolor='w', edgecolor='k')
 for ipt in range(len(yearname)):
     ax = fig.add_subplot(rows, columns, ipt+1, projection=ccrs.PlateCarree(),
                          extent=[lon_1km_md[0], lon_1km_md[-1], lat_1km_md[-1], lat_1km_md[0]])
@@ -1168,15 +1213,19 @@ for ipt in range(len(yearname)):
     gl = ax.gridlines(draw_labels=True, linestyle='--', linewidth=0.5, alpha=0.5, color='black')
     gl.xlocator = mticker.MultipleLocator(base=5)
     gl.ylocator = mticker.MultipleLocator(base=5)
-    gl.xlabel_style = {'size': 9}
-    gl.ylabel_style = {'size': 9}
+    gl.xlabel_style = {'size': 11}
+    gl.ylabel_style = {'size': 11}
     gl.xformatter = LONGITUDE_FORMATTER
     gl.yformatter = LATITUDE_FORMATTER
-    cbar = plt.colorbar(img, extend='both', orientation='horizontal', aspect=50, pad=0.1)
-    cbar.ax.tick_params(labelsize=9)
+    # cbar = plt.colorbar(img, extend='both', orientation='horizontal', aspect=50, pad=0.1)
+    # cbar.ax.tick_params(labelsize=9)
     # cbar.set_label('$\mathregular{(m^3/m^3)}$', fontsize=10, x=0.95)
-    ax.set_title(title_content[ipt], pad=20, fontsize=14, weight='bold')
-plt.subplots_adjust(left=0.1, right=0.9, bottom=0.05, top=0.92, hspace=0.2, wspace=0.2)
+    # ax.set_title(title_content[ipt], pad=20, fontsize=14, weight='bold')
+    ax.text(140.5, -25.5, title_content[ipt], fontsize=18, horizontalalignment='left', verticalalignment='top', weight='bold')
+plt.subplots_adjust(left=0.04, right=0.88, bottom=0.05, top=0.92, hspace=0.25, wspace=0.25)
+cbar_ax = fig.add_axes([0.93, 0.2, 0.02, 0.6])
+cbar = fig.colorbar(img, cax=cbar_ax, extend='both')
+cbar.ax.locator_params(nbins=4)
 plt.show()
 plt.savefig(path_results + '/smai_allyear_md.png')
 
@@ -1271,20 +1320,23 @@ for iyr in [4]:
     sm_stn_all = np.array(sm_stn_all)
 
 # Save variable
-os.chdir(path_model)
+# os.chdir(path_model)
 var_name = ['sm_stn_all']
-
-with h5py.File('sm_stn_all_2019.hdf5', 'w') as f:
+with h5py.File(path_aus_soil +'/sm_stn_all_2019.hdf5', 'w') as f:
     for x in var_name:
         f.create_dataset(x, data=eval(x))
 f.close()
+
+f_smap = h5py.File(path_aus_soil + "/sm_stn_all_2019.hdf5", "r")
+varname_list = list(f_smap.keys())
+sm_stn_all = f_smap[varname_list[0]][()]
 
 sm_stn_avg_all = [np.nanmean(sm_stn_all[month_ind[x], :], axis=0) for x in range(len(monthname))]
 sm_stn_avg_all = np.array(sm_stn_avg_all)
 
 
 # 4.3.4 Extract GPM data
-f_gpm = h5py.File(path_model+ "/gpm_precip_2019.hdf5", "r")
+f_gpm = h5py.File(path_model+ "/gpm/gpm_precip_2019.hdf5", "r")
 varname_list_gpm = list(f_gpm.keys())
 
 for x in range(len(varname_list_gpm)):
@@ -1329,9 +1381,8 @@ gpm_precip_sum = np.array(gpm_precip_sum)
 # 4.4 Make time-series plot
 stn_name_all = ['Daly', 'Gnangara', 'Robsons Creek', 'Weany Creek', 'Yanco', 'Temora', 'Tumbarumba', 'Tullochgorum']
 
-fig = plt.figure(figsize=(14, 8))
+fig = plt.figure(figsize=(14, 12))
 # fig.subplots_adjust(hspace=0.2, wspace=0.2)
-
 for ist in range(8):
 
     x = sm_stn_avg_all[:, ist]*100
@@ -1349,20 +1400,23 @@ for ist in range(8):
     lns2 = ax.plot(y1[y1mask], c='m', marker='s', label='SWDI', markersize=5)
     lns3 = ax.plot(y2[y2mask], c='b', marker='o', label='SMAI', markersize=5)
 
-    plt.xlim(0, len(y1))
+    plt.xlim(-1, len(y1))
     ax.set_xticks(np.arange(12))
-    ax.set_xticklabels(['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'])
-    plt.ylim(-30, 50)
-    # ax.set_yticks(np.arange(0, 0.6, 0.1))
+    ax.set_xticklabels(['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], fontsize=12)
+    ax.grid(linestyle='--')
+    # plt.ylim(-30, 50, 3)
+    ax.set_ylim(-30, 50, 3)
+    ax.set_yticks(np.arange(-30, 70, 20))
     # plt.grid(linestyle='--')
-    ax.tick_params(axis='y', labelsize=10)
+    ax.tick_params(axis='y', labelsize=12)
     ax.text(10, 40, stn_name_all[ist], fontsize=12)
 
     ax2 = ax.twinx()
-    ax2.set_ylim(0, 100, 4)
+    ax2.set_ylim(0, 80, 3)
+    ax2.set_yticks(np.arange(0, 100, 20))
     ax2.invert_yaxis()
     lns4 = ax2.bar(np.arange(len(x)), z, width = 0.8, color='royalblue', label='Precip', alpha=0.5)
-    ax2.tick_params(axis='y', labelsize=10)
+    ax2.tick_params(axis='y', labelsize=12)
 
 # add all legends together
 handles = lns1+lns2+lns3+[lns4]
@@ -1374,7 +1428,7 @@ plt.gca().legend(handles, labels, loc='center left', bbox_to_anchor=(1.05, 4.5))
 fig.text(0.51, 0.01, 'Months', ha='center', fontsize=16, fontweight='bold')
 fig.text(0.04, 0.4, 'Drought Indicators', rotation='vertical', fontsize=16, fontweight='bold')
 fig.text(0.95, 0.4, 'GPM Precip (mm)', rotation='vertical', fontsize=16, fontweight='bold')
-plt.subplots_adjust(left=0.1, right=0.9, bottom=0.1, top=0.92, hspace=0.25, wspace=0.25)
+plt.subplots_adjust(left=0.1, right=0.9, bottom=0.07, top=0.95, hspace=0.2, wspace=0.2)
 # plt.suptitle('Danube River Basin', fontsize=19, y=0.97, fontweight='bold')
 plt.savefig(path_results + '/t-series1' + '.png')
 plt.close(fig)
@@ -1406,7 +1460,7 @@ swdi_days_ind = [int(tif_files[x].split('.')[0][-3:])-1 for x in range(len(tif_f
 swdi_md_full = np.empty([365, swdi_md_all.shape[1]], dtype='float32')
 swdi_md_full[:] = np.nan
 swdi_md_full[swdi_days_ind, :] = swdi_md_all
-swdi_md_weekly = [swdi_md_full[x*7:x*7+6, :].ravel() for x in range(365//7)]
+swdi_md_weekly = [swdi_md_full[x*7:x*7+7, :].ravel() for x in range(365//7)]
 
 swdi_md_weekly_full = []
 for n in range(len(swdi_md_weekly)):
@@ -1422,7 +1476,7 @@ swdi_md_weekly_spdev = np.array(swdi_md_weekly_spdev)
 swdi_md_weekly_spdev_full = np.empty([365, ], dtype='float32')
 swdi_md_weekly_spdev_full[:] = np.nan
 swdi_md_weekly_spdev_full[swdi_days_ind, ] = swdi_md_weekly_spdev
-swdi_md_weekly_spdev_group = [swdi_md_weekly_spdev_full[x*7:x*7+6, ].ravel() for x in range(365//7)]
+swdi_md_weekly_spdev_group = [swdi_md_weekly_spdev_full[x*7:x*7+7, ].ravel() for x in range(365//7)]
 
 
 # 5.1.2 Load in the world SMAP 1 km SM
@@ -1441,7 +1495,7 @@ for iyr in [4]:
         del(sm_arr)
     sm_smap_all = np.array(sm_smap_all)
 
-# Save variable
+# Save the variable
 os.chdir(path_model)
 var_name = ['sm_smap_all']
 
@@ -1450,12 +1504,18 @@ with h5py.File('sm_smap_all_2019.hdf5', 'w') as f:
         f.create_dataset(x, data=eval(x))
 f.close()
 
+# Load the variable
+f1 = h5py.File(path_aus_soil + "/sm_smap_all_2019.hdf5", "r")
+varname_list = list(f1.keys())
+sm_smap_all = f1[varname_list[0]][()]
+
+
 smap_days_ind = [int(tif_files[x].split('.')[0][-3:])-1 for x in range(len(tif_files))]
 
 smap_md_full = np.empty([365, sm_smap_all.shape[1]], dtype='float32')
 smap_md_full[:] = np.nan
 smap_md_full[smap_days_ind, :] = sm_smap_all
-smap_md_weekly = [smap_md_full[x*7:x*7+6, :].ravel() for x in range(365//7)]
+smap_md_weekly = [smap_md_full[x*7:x*7+7, :].ravel() for x in range(365//7)]
 
 smap_md_weekly_full = []
 for n in range(len(smap_md_weekly)):
@@ -1468,11 +1528,11 @@ for n in range(len(smap_md_weekly)):
 smap_md_weekly_spdev = [np.sqrt(np.nanmean((smap_md_full[x, :] - np.nanmean(smap_md_full[x, :])) ** 2))
                         for x in range(len(smap_md_full))]
 smap_md_weekly_spdev = np.array(smap_md_weekly_spdev)
-smap_md_weekly_spdev_group = [smap_md_weekly_spdev[x*7:x*7+6, ].ravel() for x in range(365//7)]
+smap_md_weekly_spdev_group = [smap_md_weekly_spdev[x*7:x*7+7, ].ravel() for x in range(365//7)]
 
 
 # 5.1.3 Extract GPM data
-f_gpm = h5py.File(path_model + "/gpm_precip_2019.hdf5", "r")
+f_gpm = h5py.File(path_model + "/gpm/gpm_precip_2019.hdf5", "r")
 varname_list_gpm = list(f_gpm.keys())
 
 for x in range(len(varname_list_gpm)):
@@ -1484,8 +1544,12 @@ f_gpm.close()
 
 gpm_precip = gpm_precip_10km_2019[row_md_10km_world_ind[0]:row_md_10km_world_ind[-1]+1,
              col_md_10km_world_ind[0]:col_md_10km_world_ind[-1]+1, :]
-gpm_precip = np.reshape(gpm_precip, (gpm_precip.shape[0]*gpm_precip.shape[1], gpm_precip.shape[2]))
-gpm_md_weekly = [gpm_precip[x*7:x*7+6, :].ravel() for x in range(365//7)]
+gpm_md_weekly_split = \
+    [gpm_precip[:, :, x*7:x*7+7].reshape(gpm_precip.shape[0]*gpm_precip.shape[1], 7) for x in range(365//7)]
+gpm_md_weekly = [np.nansum(gpm_precip[:, :, x*7:x*7+7], axis=2).ravel() for x in range(365//7)]
+
+# gpm_precip = np.reshape(gpm_precip, (gpm_precip.shape[0]*gpm_precip.shape[1], gpm_precip.shape[2]))
+# gpm_md_weekly = [gpm_precip[x*7:x*7+6, :].ravel() for x in range(365//7)]
 
 gpm_md_weekly_full = []
 for n in range(len(gpm_md_weekly)):
@@ -1495,92 +1559,79 @@ for n in range(len(gpm_md_weekly)):
     del(gpm_md_weekly_mat)
 
 # Calculate Spatial SpDev of GPM
-gpm_md_weekly_spdev = [np.sqrt(np.nanmean((gpm_precip[:, x] - np.nanmean(gpm_precip[:, x])) ** 2))
-                        for x in range(gpm_precip.shape[1])]
-gpm_md_weekly_spdev = np.array(gpm_md_weekly_spdev)
-gpm_md_weekly_spdev_group = [gpm_md_weekly_spdev[x*7:x*7+6, ].ravel() for x in range(365//7)]
+# gpm_md_weekly_spdev = [np.sqrt(np.nanmean((gpm_precip[:, x] - np.nanmean(gpm_precip[:, x])) ** 2))
+#                         for x in range(gpm_precip.shape[1])]
+# gpm_md_weekly_spdev = np.array(gpm_md_weekly_spdev)
+# gpm_md_weekly_spdev_group = [gpm_md_weekly_spdev[x*7:x*7+6, ].ravel() for x in range(365//7)]
+
+gpm_md_weekly_spdev_group = \
+    [np.sqrt(np.nanmean((gpm_md_weekly_split[x] - np.nanmean(gpm_md_weekly_split[x], axis=0)) ** 2, axis=0))
+     for x in range(len(gpm_md_weekly_split))]
 
 
 # 5.1.4.1 Make the boxplot (absolute values)
-
-fig = plt.figure(figsize=(12, 8))
+fig = plt.figure(figsize=(12, 12))
 ax = fig.subplots(3, 1)
 ax[0].boxplot(smap_md_weekly_full, 0, '')
 ax[0].set_xticks(np.arange(1, 53, 5))
-ax[0].set_xticklabels(['1', '6', '11', '16', '21', '26', '31', '36', '41', '46', '51'])
+ax[0].set_xticklabels(['1', '6', '11', '16', '21', '26', '31', '36', '41', '46', '51'], fontsize=13)
+ax[0].tick_params(axis="y", labelsize=13)
+ax[0].grid(linestyle='--')
 # ax[0].set_title('SM', fontsize=16, position=(0.1, 0.85))
 ax[1].boxplot(swdi_md_weekly_full, 0, '')
 ax[1].set_xticks(np.arange(1, 53, 5))
-ax[1].set_xticklabels(['1', '6', '11', '16', '21', '26', '31', '36', '41', '46', '51'])
+ax[1].set_xticklabels(['1', '6', '11', '16', '21', '26', '31', '36', '41', '46', '51'], fontsize=13)
+ax[1].tick_params(axis="y", labelsize=13)
+ax[1].grid(linestyle='--')
 # ax[1].set_title('SWDI', fontsize=15, position=(0.1, 0.85))
 ax[2].boxplot(gpm_md_weekly_full, 0, '')
 ax[2].set_xticks(np.arange(1, 53, 5))
-ax[2].set_xticklabels(['1', '6', '11', '16', '21', '26', '31', '36', '41', '46', '51'])
+ax[2].set_xticklabels(['1', '6', '11', '16', '21', '26', '31', '36', '41', '46', '51'], fontsize=13)
+ax[2].tick_params(axis="y", labelsize=13)
+ax[2].grid(linestyle='--')
 # ax[2].set_title('Precipitation', fontsize=15, position=(0.1, 0.85))
 
-fig.text(0.04, 0.12, 'Precipitation', rotation='vertical', fontsize=16, fontweight='bold')
-fig.text(0.04, 0.5, 'SWDI', rotation='vertical', fontsize=16, fontweight='bold')
-fig.text(0.04, 0.78, 'SM', rotation='vertical', fontsize=16, fontweight='bold')
-fig.text(0.51, 0.01, 'Weeks', ha='center', fontsize=16, fontweight='bold')
-plt.subplots_adjust(left=0.1, right=0.9, bottom=0.1, top=0.92, hspace=0.25, wspace=0.25)
+fig.text(0.03, 0.12, 'Precipitation', rotation='vertical', fontsize=18, fontweight='bold')
+fig.text(0.03, 0.5, 'SWDI', rotation='vertical', fontsize=18, fontweight='bold')
+fig.text(0.03, 0.8, 'SM', rotation='vertical', fontsize=18, fontweight='bold')
+fig.text(0.51, 0.01, 'Weeks', ha='center', fontsize=18, fontweight='bold')
+plt.subplots_adjust(left=0.1, right=0.95, bottom=0.08, top=0.95, hspace=0.25, wspace=0.25)
+plt.show()
 plt.savefig(path_results + '/boxplot_1' + '.png')
 plt.close(fig)
 
 
 # 5.1.4.2 Make the boxplot (spatial standard deviation)
-
-fig = plt.figure(figsize=(12, 8))
+fig = plt.figure(figsize=(12, 12))
 ax = fig.subplots(3, 1)
 ax[0].boxplot(smap_md_weekly_spdev_group, 0, '')
 ax[0].set_xticks(np.arange(1, 53, 5))
-ax[0].set_xticklabels(['1', '6', '11', '16', '21', '26', '31', '36', '41', '46', '51'])
+ax[0].set_xticklabels(['1', '6', '11', '16', '21', '26', '31', '36', '41', '46', '51'], fontsize=13)
+ax[0].tick_params(axis="y", labelsize=13)
+ax[0].grid(linestyle='--')
 # ax[0].set_title('SM', fontsize=16, position=(0.1, 0.85))
 ax[1].boxplot(swdi_md_weekly_spdev_group, 0, '')
 ax[1].set_xticks(np.arange(1, 53, 5))
-ax[1].set_xticklabels(['1', '6', '11', '16', '21', '26', '31', '36', '41', '46', '51'])
+ax[1].set_xticklabels(['1', '6', '11', '16', '21', '26', '31', '36', '41', '46', '51'], fontsize=13)
+ax[1].tick_params(axis="y", labelsize=13)
+ax[1].grid(linestyle='--')
 # ax[1].set_title('SWDI', fontsize=15, position=(0.1, 0.85))
 ax[2].boxplot(gpm_md_weekly_spdev_group, 0, '')
 ax[2].set_xticks(np.arange(1, 53, 5))
-ax[2].set_xticklabels(['1', '6', '11', '16', '21', '26', '31', '36', '41', '46', '51'])
+ax[2].set_xticklabels(['1', '6', '11', '16', '21', '26', '31', '36', '41', '46', '51'], fontsize=13)
+ax[2].tick_params(axis="y", labelsize=13)
+ax[2].grid(linestyle='--')
 # ax[2].set_title('Precipitation', fontsize=15, position=(0.1, 0.85))
 
-fig.text(0.04, 0.1, 'Precipitation($\sigma$)', rotation='vertical', fontsize=16, fontweight='bold')
-fig.text(0.04, 0.47, 'SWDI($\sigma$)', rotation='vertical', fontsize=16, fontweight='bold')
-fig.text(0.04, 0.76, 'SM($\sigma$)', rotation='vertical', fontsize=16, fontweight='bold')
-fig.text(0.51, 0.01, 'Weeks', ha='center', fontsize=16, fontweight='bold')
-plt.subplots_adjust(left=0.1, right=0.9, bottom=0.1, top=0.92, hspace=0.25, wspace=0.25)
+fig.text(0.03, 0.12, 'Precipitation($\sigma$)', rotation='vertical', fontsize=18, fontweight='bold')
+fig.text(0.03, 0.48, 'SWDI($\sigma$)', rotation='vertical', fontsize=18, fontweight='bold')
+fig.text(0.03, 0.8, 'SM($\sigma$)', rotation='vertical', fontsize=18, fontweight='bold')
+fig.text(0.51, 0.01, 'Weeks', ha='center', fontsize=18, fontweight='bold')
+plt.subplots_adjust(left=0.1, right=0.95, bottom=0.08, top=0.95, hspace=0.25, wspace=0.25)
 plt.savefig(path_results + '/boxplot_spdev' + '.png')
 plt.close(fig)
 
 ########################################################################################################################
-
-
-
-# swdi_days_ind = [int(tif_files[x].split('.')[0][-3:])-1 for x in range(len(tif_files))]
-#
-# swdi_md_full = np.empty([365, swdi_md_all.shape[1]], dtype='float32')
-# swdi_md_full[:] = np.nan
-# swdi_md_full[swdi_days_ind, :] = swdi_md_all
-# swdi_md_weekly = [swdi_md_full[x*7:x*7+6, :].ravel() for x in range(365//7)]
-#
-# swdi_md_weekly_full = []
-# for n in range(len(swdi_md_weekly)):
-#     swdi_md_array = swdi_md_weekly[n]
-#     swdi_md_array = swdi_md_array[~np.isnan(swdi_md_array)]
-#     swdi_md_weekly_full.append(swdi_md_array)
-#     del(swdi_md_array)
-
-# swdi_monthly = swdi_arr_allyear[:, row_md_1km_ind[0]:row_md_1km_ind[-1]+1, col_md_1km_ind[0]:col_md_1km_ind[-1]+1]
-
-# # Calculate Spatial SpDev of swdi
-# swdi_md_weekly_spdev = [np.sqrt(np.nanmean((swdi_md_allyear[x, :] - np.nanmean(swdi_md_allyear[x, :])) ** 2))
-#                         for x in range(len(swdi_md_allyear))]
-# swdi_md_weekly_spdev = np.array(swdi_md_weekly_spdev)
-# swdi_md_weekly_spdev_full = np.empty([365, ], dtype='float32')
-# swdi_md_weekly_spdev_full[:] = np.nan
-# swdi_md_weekly_spdev_full[swdi_days_ind, ] = swdi_md_weekly_spdev
-# swdi_md_weekly_spdev_group = [swdi_md_weekly_spdev_full[x*7:x*7+6, ].ravel() for x in range(365//7)]
-
 
 # 5.2.2 Load in the world SMAP 1 km SM
 for iyr in [4]:
@@ -1835,13 +1886,29 @@ f.close()
 
 # 6.1.3. Extract the SWDI data / SMAI data
 f = h5py.File("/Volumes/MyPassport/SMAP_Project/Datasets/Australia/smap_1km_md.hdf5", "r")
-varname_list = ['smap_ext_monthly', 'smap_md_monthly']
+varname_list = ['smap_ismn_allyear', 'smap_sm_allyear']
 for x in range(len(varname_list)):
     var_obj = f[varname_list[x]][()]
     exec(varname_list[x] + '= var_obj')
     del(var_obj)
 f.close()
 
+# Save ISMN and matched SMAP SM data
+ismn_sm_md = np.transpose(ismn_sm_monthly, (1, 0))
+smap_sm_md = np.transpose(smap_ismn_allyear, (1, 0))
+ismn_sm_md = ismn_sm_md[:, 1:]
+
+columns = [str(yearname[x]) + '_' + monthname[y] for x in range(len(yearname)) for y in range(len(monthname))]
+columns = columns[4:]
+
+df_ismn_sm_md = pd.DataFrame(ismn_sm_md, columns=columns, index=list(df_coords.index))
+df_smap_sm_md = pd.DataFrame(smap_sm_md, columns=columns, index=list(df_coords.index))
+writer = pd.ExcelWriter('/Users/binfang/Downloads/smap_ismn_sm.xlsx')
+df_ismn_sm_md.to_excel(writer, sheet_name='ISMN')
+df_smap_sm_md.to_excel(writer, sheet_name='SMAP')
+writer.save()
+
+# Load in SWDI and SMAI monthly data
 swdi_tf = gdal.Open('/Volumes/MyPassport/SMAP_Project/Datasets/Australia/allyear_swdi_monthly.tif')
 swdi_monthly = swdi_tf.ReadAsArray().astype(np.float32)
 swdi_monthly = swdi_monthly[:, stn_row_1km_ind_all, stn_col_1km_ind_all]
@@ -1858,7 +1925,7 @@ ismn_sm_monthly = np.concatenate((swdi_monthly[:3, :], ismn_sm_monthly), axis=0)
 stn_name_all = list(df_coords.index)
 
 # Figure 1
-fig = plt.figure(figsize=(14, 8))
+fig = plt.figure(figsize=(14, 12))
 for ist in range(10):
     x = ismn_sm_monthly[:, ist]*100
     y1 = swdi_monthly[:, ist]
@@ -1877,13 +1944,14 @@ for ist in range(10):
     labels = ['2015', '2016', '2017', '2018', '2019']
     mticks = ax.get_xticks()
     ax.set_xticks(mticks-6, minor=True)
-    ax.tick_params(axis='x', which='minor', length=0)
+    ax.tick_params(axis='x', which='minor', length=0, labelsize=14)
     ax.set_xticklabels(labels, minor=True)
     plt.ylim(-30, 50)
     ax.set_yticks(np.arange(-30, 70, 20))
     # plt.grid(linestyle='--')
-    ax.tick_params(axis='y', labelsize=10)
-    ax.text(58, 35, stn_name_all[ist].replace('_', ' '), fontsize=12, horizontalalignment='right')
+    ax.tick_params(axis='y', labelsize=14)
+    ax.grid(linestyle='--')
+    ax.text(58, 35, stn_name_all[ist].replace('_', ' '), fontsize=16, horizontalalignment='right')
 
     # ax2 = ax.twinx()
     # ax2.set_ylim(0, 0.5, 5)
@@ -1896,18 +1964,18 @@ handles = lns1+lns2+lns3
 labels = [l.get_label() for l in handles]
 
 handles, labels = ax.get_legend_handles_labels()
-plt.gca().legend(handles, labels, loc='center left', bbox_to_anchor=(1.05, 5.6))
+plt.gca().legend(handles, labels, loc='center left', bbox_to_anchor=(1, 5.8))
 
-fig.text(0.51, 0.01, 'Years', ha='center', fontsize=16, fontweight='bold')
-fig.text(0.04, 0.4, 'Drought Indicators', rotation='vertical', fontsize=16, fontweight='bold')
-plt.subplots_adjust(left=0.1, right=0.9, bottom=0.1, top=0.92, hspace=0.25, wspace=0.25)
+fig.text(0.51, 0.01, 'Years', ha='center', fontsize=18, fontweight='bold')
+fig.text(0.01, 0.4, 'Drought Indicators', rotation='vertical', fontsize=18, fontweight='bold')
+plt.subplots_adjust(left=0.08, right=0.92, bottom=0.08, top=0.94, hspace=0.25, wspace=0.25)
 # plt.suptitle('Danube River Basin', fontsize=19, y=0.97, fontweight='bold')
 plt.savefig(path_results + '/t-series1_monthly' + '.png')
 plt.close(fig)
 
 
 # Figure 2
-fig = plt.figure(figsize=(14, 8))
+fig = plt.figure(figsize=(14, 12))
 for ist in range(10, 19):
     x = ismn_sm_monthly[:, ist]*100
     y1 = swdi_monthly[:, ist]
@@ -1926,13 +1994,14 @@ for ist in range(10, 19):
     labels = ['2015', '2016', '2017', '2018', '2019']
     mticks = ax.get_xticks()
     ax.set_xticks(mticks-6, minor=True)
-    ax.tick_params(axis='x', which='minor', length=0)
+    ax.tick_params(axis='x', which='minor', length=0, labelsize=14)
     ax.set_xticklabels(labels, minor=True)
     plt.ylim(-30, 50)
     ax.set_yticks(np.arange(-30, 70, 20))
     # plt.grid(linestyle='--')
-    ax.tick_params(axis='y', labelsize=10)
-    ax.text(58, 35, stn_name_all[ist].replace('_', ' '), fontsize=12, horizontalalignment='right')
+    ax.tick_params(axis='y', labelsize=14)
+    ax.grid(linestyle='--')
+    ax.text(58, 35, stn_name_all[ist].replace('_', ' '), fontsize=16, horizontalalignment='right')
 
     # ax2 = ax.twinx()
     # ax2.set_ylim(0, 0.5, 5)
@@ -1945,11 +2014,11 @@ handles = lns1+lns2+lns3
 labels = [l.get_label() for l in handles]
 
 handles, labels = ax.get_legend_handles_labels()
-plt.gca().legend(handles, labels, loc='center left', bbox_to_anchor=(2.3, 5.6))
+plt.gca().legend(handles, labels, loc='center left', bbox_to_anchor=(2.25, 5.8))
 
 fig.text(0.51, 0.01, 'Years', ha='center', fontsize=16, fontweight='bold')
-fig.text(0.04, 0.4, 'Drought Indicators', rotation='vertical', fontsize=16, fontweight='bold')
-plt.subplots_adjust(left=0.1, right=0.9, bottom=0.1, top=0.92, hspace=0.25, wspace=0.25)
+fig.text(0.01, 0.4, 'Drought Indicators', rotation='vertical', fontsize=16, fontweight='bold')
+plt.subplots_adjust(left=0.08, right=0.92, bottom=0.08, top=0.94, hspace=0.25, wspace=0.25)
 # plt.suptitle('Danube River Basin', fontsize=19, y=0.97, fontweight='bold')
 plt.savefig(path_results + '/t-series2_monthly' + '.png')
 plt.close(fig)
@@ -2069,7 +2138,7 @@ for iyr in range(len(yearname)):
         gpm_precip_md.reshape(gpm_precip_md.shape[0]*gpm_precip_md.shape[1], gpm_precip_md.shape[2])
     gpm_precip_md_split = np.hsplit(gpm_precip_md, month_seq_cumsum)  # split by each month
     gpm_precip_md_split = gpm_precip_md_split[:-1]
-    gpm_precip_md_monthly = [np.nanmean(gpm_precip_md_split[x], axis=1) for x in range(len(gpm_precip_md_split))]
+    gpm_precip_md_monthly = [np.nansum(gpm_precip_md_split[x], axis=1) for x in range(len(gpm_precip_md_split))]
     # gpm_precip_md_monthly = np.stack(gpm_precip_md_monthly, axis=1)
     # gpm_precip_md_monthly = np.transpose(gpm_precip_md_monthly, (1, 0))
     gpm_precip_md_monthly_spdev = \
@@ -2089,9 +2158,10 @@ gpm_precip_md_allyear_spdev = list(chain.from_iterable(gpm_precip_md_allyear_spd
 gpm_precip_md_allyear = [[]] * 4 + gpm_precip_md_allyear[1:]
 gpm_precip_md_allyear_spdev = [[]] * 4 + gpm_precip_md_allyear_spdev[1:]
 
+
 # 6.5.1 Make the boxplot (absolute values)
 
-fig = plt.figure(figsize=(13, 8))
+fig = plt.figure(figsize=(13, 12))
 ax = fig.subplots(3, 1)
 ax[0].boxplot(smap_sm_allyear_ls, 0, '')
 ax[0].set_xticks(np.arange(0, 60, 12)+12)
@@ -2099,8 +2169,10 @@ ax[0].set_xticklabels([])
 labels = ['2015', '2016', '2017', '2018', '2019']
 mticks = ax[0].get_xticks()
 ax[0].set_xticks(mticks - 6, minor=True)
-ax[0].tick_params(axis='x', which='minor', length=0)
+ax[0].tick_params(axis='x', which='minor', length=0, labelsize=14)
+ax[0].tick_params(axis='y', labelsize=14)
 ax[0].set_xticklabels(labels, minor=True)
+ax[0].grid(linestyle='--')
 # ax[0].set_title('SM', fontsize=16, position=(0.1, 0.85))
 ax[1].boxplot(swdi_md_allyear_ls, 0, '')
 ax[1].set_xticks(np.arange(0, 60, 12)+12)
@@ -2108,8 +2180,10 @@ ax[1].set_xticklabels([])
 labels = ['2015', '2016', '2017', '2018', '2019']
 mticks = ax[1].get_xticks()
 ax[1].set_xticks(mticks - 6, minor=True)
-ax[1].tick_params(axis='x', which='minor', length=0)
+ax[1].tick_params(axis='x', which='minor', length=0, labelsize=14)
+ax[1].tick_params(axis='y', labelsize=14)
 ax[1].set_xticklabels(labels, minor=True)
+ax[1].grid(linestyle='--')
 # ax[1].set_title('SWDI', fontsize=15, position=(0.1, 0.85))
 ax[2].boxplot(gpm_precip_md_allyear, 0, '')
 ax[2].set_xticks(np.arange(0, 60, 12)+12)
@@ -2117,15 +2191,17 @@ ax[2].set_xticklabels([])
 labels = ['2015', '2016', '2017', '2018', '2019']
 mticks = ax[1].get_xticks()
 ax[2].set_xticks(mticks - 6, minor=True)
-ax[2].tick_params(axis='x', which='minor', length=0)
+ax[2].tick_params(axis='x', which='minor', length=0, labelsize=14)
+ax[2].tick_params(axis='y', labelsize=14)
 ax[2].set_xticklabels(labels, minor=True)
+ax[2].grid(linestyle='--')
 # ax[2].set_title('Precipitation', fontsize=15, position=(0.1, 0.85))
 
-fig.text(0.04, 0.12, 'Precipitation', rotation='vertical', fontsize=16, fontweight='bold')
-fig.text(0.04, 0.5, 'SWDI', rotation='vertical', fontsize=16, fontweight='bold')
-fig.text(0.04, 0.78, 'SM', rotation='vertical', fontsize=16, fontweight='bold')
-fig.text(0.51, 0.01, 'Years', ha='center', fontsize=16, fontweight='bold')
-plt.subplots_adjust(left=0.1, right=0.9, bottom=0.1, top=0.92, hspace=0.25, wspace=0.25)
+fig.text(0.02, 0.13, 'Precipitation', rotation='vertical', fontsize=18, fontweight='bold')
+fig.text(0.02, 0.5, 'SWDI', rotation='vertical', fontsize=18, fontweight='bold')
+fig.text(0.02, 0.81, 'SM', rotation='vertical', fontsize=18, fontweight='bold')
+fig.text(0.52, 0.01, 'Years', ha='center', fontsize=18, fontweight='bold')
+plt.subplots_adjust(left=0.08, right=0.96, bottom=0.08, top=0.96, hspace=0.25, wspace=0.25)
 plt.savefig(path_results + '/boxplot_allyear_1' + '.png')
 plt.close(fig)
 
@@ -2133,7 +2209,7 @@ plt.close(fig)
 
 # 6.5.2 Make the boxplot (spatial standard deviation)
 
-fig = plt.figure(figsize=(13, 8))
+fig = plt.figure(figsize=(13, 12))
 ax = fig.subplots(3, 1)
 ax[0].boxplot(smap_sm_spdev_allyear_ls, 0, '')
 ax[0].set_xticks(np.arange(0, 60, 12)+12)
@@ -2141,8 +2217,10 @@ ax[0].set_xticklabels([])
 labels = ['2015', '2016', '2017', '2018', '2019']
 mticks = ax[0].get_xticks()
 ax[0].set_xticks(mticks - 6, minor=True)
-ax[0].tick_params(axis='x', which='minor', length=0)
+ax[0].tick_params(axis='x', which='minor', length=0, labelsize=14)
+ax[0].tick_params(axis='y', labelsize=14)
 ax[0].set_xticklabels(labels, minor=True)
+ax[0].grid(linestyle='--')
 # ax[0].set_title('SM', fontsize=16, position=(0.1, 0.85))
 ax[1].boxplot(swdi_md_spdev_allyear_ls, 0, '')
 ax[1].set_xticks(np.arange(0, 60, 12)+12)
@@ -2150,8 +2228,10 @@ ax[1].set_xticklabels([])
 labels = ['2015', '2016', '2017', '2018', '2019']
 mticks = ax[1].get_xticks()
 ax[1].set_xticks(mticks - 6, minor=True)
-ax[1].tick_params(axis='x', which='minor', length=0)
+ax[1].tick_params(axis='x', which='minor', length=0, labelsize=14)
+ax[1].tick_params(axis='y', labelsize=14)
 ax[1].set_xticklabels(labels, minor=True)
+ax[1].grid(linestyle='--')
 # ax[1].set_title('SWDI', fontsize=15, position=(0.1, 0.85))
 ax[2].boxplot(gpm_precip_md_allyear_spdev, 0, '')
 ax[2].set_xticks(np.arange(0, 60, 12)+12)
@@ -2159,15 +2239,17 @@ ax[2].set_xticklabels([])
 labels = ['2015', '2016', '2017', '2018', '2019']
 mticks = ax[1].get_xticks()
 ax[2].set_xticks(mticks - 6, minor=True)
-ax[2].tick_params(axis='x', which='minor', length=0)
+ax[2].tick_params(axis='x', which='minor', length=0, labelsize=14)
+ax[2].tick_params(axis='y', labelsize=14)
 ax[2].set_xticklabels(labels, minor=True)
+ax[2].grid(linestyle='--')
 # ax[2].set_title('Precipitation', fontsize=15, position=(0.1, 0.85))
 
-fig.text(0.04, 0.12, 'Precipitation($\sigma$)', rotation='vertical', fontsize=16, fontweight='bold')
-fig.text(0.04, 0.5, 'SWDI($\sigma$)', rotation='vertical', fontsize=16, fontweight='bold')
-fig.text(0.04, 0.78, 'SM($\sigma$)', rotation='vertical', fontsize=16, fontweight='bold')
-fig.text(0.51, 0.01, 'Years', ha='center', fontsize=16, fontweight='bold')
-plt.subplots_adjust(left=0.1, right=0.9, bottom=0.1, top=0.92, hspace=0.25, wspace=0.25)
+fig.text(0.02, 0.13, 'Precipitation($\sigma$)', rotation='vertical', fontsize=18, fontweight='bold')
+fig.text(0.02, 0.5, 'SWDI($\sigma$)', rotation='vertical', fontsize=18, fontweight='bold')
+fig.text(0.02, 0.81, 'SM($\sigma$)', rotation='vertical', fontsize=18, fontweight='bold')
+fig.text(0.52, 0.01, 'Years', ha='center', fontsize=18, fontweight='bold')
+plt.subplots_adjust(left=0.1, right=0.96, bottom=0.08, top=0.96, hspace=0.25, wspace=0.25)
 plt.savefig(path_results + '/boxplot_allyear_2' + '.png')
 plt.close(fig)
 
