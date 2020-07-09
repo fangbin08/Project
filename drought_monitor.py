@@ -196,7 +196,7 @@ path_results = '/Users/binfang/Documents/SMAP_Project/results/results_200605'
 # Path of preview
 path_preview = '/Users/binfang/Documents/SMAP_Project/results/results_191202/preview'
 # Path of swdi data
-path_swdi = '/Users/binfang/Downloads/Processing/Australia/swdi'
+path_swdi = '/Volumes/MyPassport/SMAP_Project/Datasets/Australia/swdi'
 # Path of model data
 path_model = '/Volumes/MyPassport/SMAP_Project/Datasets/model_data'
 # Path of processed data
@@ -1398,7 +1398,7 @@ for ist in range(8):
 
     lns1 = ax.plot(x[xmask], c='k', marker='s', label='SM', markersize=5)
     lns2 = ax.plot(y1[y1mask], c='m', marker='s', label='SWDI', markersize=5)
-    lns3 = ax.plot(y2[y2mask], c='b', marker='o', label='SMAI', markersize=5)
+    lns3 = ax.plot(y2[y2mask], c='b', marker='o', label='SMDI', markersize=5)
 
     plt.xlim(-1, len(y1))
     ax.set_xticks(np.arange(12))
@@ -1936,7 +1936,7 @@ for ist in range(10):
 
     lns1 = ax.plot(x, c='k', marker='s', label='SM', markersize=4)
     lns2 = ax.plot(y1, c='m', marker='s', label='SWDI', markersize=4)
-    lns3 = ax.plot(y2, c='b', marker='o', label='SMAI', markersize=4)
+    lns3 = ax.plot(y2, c='b', marker='o', label='SMDI', markersize=4)
 
     plt.xlim(0, len(x))
     ax.set_xticks(np.arange(0, 60, 12)+12)
@@ -1986,7 +1986,7 @@ for ist in range(10, 19):
 
     lns1 = ax.plot(x, c='k', marker='s', label='SM', markersize=4)
     lns2 = ax.plot(y1, c='m', marker='s', label='SWDI', markersize=4)
-    lns3 = ax.plot(y2, c='b', marker='o', label='SMAI', markersize=4)
+    lns3 = ax.plot(y2, c='b', marker='o', label='SMDI', markersize=4)
 
     plt.xlim(0, len(x))
     ax.set_xticks(np.arange(0, 60, 12)+12)
