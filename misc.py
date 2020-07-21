@@ -75,8 +75,12 @@ path_smap_sm_ds = '/Volumes/MyPassport/SMAP_Project/Datasets/MODIS/Downscale'
 path_smap = '/Volumes/MyPassport/SMAP_Project/Datasets/SMAP'
 # Path of processed data
 path_processed = '/Volumes/MyPassport/SMAP_Project/Datasets/processed_data'
-#Path of SMAP Mat-files
+# Path of SMAP Mat-files
 path_matfile = '/Volumes/MyPassport/SMAP_Project/Datasets/CONUS'
+# Path of shapefile
+path_shp = '/Users/binfang/Downloads/Processing/shapefiles'
+# Path of SMAP output
+path_output = '/Users/binfang/Downloads/Processing/smap_output'
 
 lst_folder = '/MYD11A1/'
 ndvi_folder = '/MYD13A2/'
@@ -99,7 +103,7 @@ for i in range(delta_date.days + 1):
     date_seq_doy.append(str(date_str.timetuple().tm_year) + str(date_str.timetuple().tm_yday).zfill(3))
 
 # Count how many days for a specific year
-yearname = np.linspace(2015, 2019, 5, dtype='int')
+yearname = np.linspace(2015, 2020, 6, dtype='int')
 monthnum = np.linspace(1, 12, 12, dtype='int')
 monthname = np.arange(1, 13)
 monthname = [str(i).zfill(2) for i in monthname]
@@ -135,7 +139,7 @@ daysofmonth_seq[1, :] = daysofmonth_seq[1, :] + ind_iflpr # Add leap days to Feb
 # Load in geo-location parameters
 os.chdir(path_workspace)
 f = h5py.File("ds_parameters.hdf5", "r")
-varname_list = ['lat_world_max', 'lat_world_min', 'lon_world_max', 'lon_world_min',
+varname_list = ['lat_world_max', 'lat_world_min', 'lon_world_max', 'lon_world_min', 'interdist_ease_9km',
                 'lat_world_ease_9km', 'lon_world_ease_9km', 'lat_world_ease_1km', 'lon_world_ease_1km']
 
 for x in range(len(varname_list)):
@@ -144,6 +148,16 @@ for x in range(len(varname_list)):
     del(var_obj)
 f.close()
 
+
+# # Load in variables
+# os.chdir(path_workspace)
+# f = h5py.File('ds_parameters.hdf5', 'r')
+# varname_list = list(f.keys())
+#
+# for x in range(len(varname_list)):
+#     var_obj = f[varname_list[x]][()]
+#     exec(varname_list[x] + '= var_obj')
+# f.close()
 
 ####################################################################################################################################
 # 1.1 Check the completeness of downloaded GLDAS files
@@ -209,13 +223,13 @@ f.close()
 ####################################################################################################################################
 # 2. Check the completeness of downloaded MODIS files
 # os.chdir(path_modis + lst_folder + '2019/05/')
-os.chdir('/Volumes/MyPassport/SMAP_Project/NewData/SMAP/2019')
+os.chdir('/Users/binfang/Downloads/Processing/bash_codes/download/')
 # Downloaded files
-files = sorted(glob.glob('*.h5'))
+files = sorted(glob.glob('*.nc4'))
 
 # List of files to download
-os.chdir('/Users/binfang/Downloads/bash_codes/')
-with open("3365467267-download.txt", "r") as ins:
+os.chdir('/Users/binfang/Downloads/Processing/bash_codes/download/')
+with open("4969365288-download.txt", "r") as ins:
     url_list = []
     for line in ins:
         url_list.append(line)
@@ -227,9 +241,9 @@ files_list = [url_list[x][:-1].split('/')[-1] for x in range(len(url_list))]
 modfile_miss_ind = [files_list.index(i) for i in files_list if i not in files]
 modfile_miss_url = [url_list[modfile_miss_ind[x]] for x in range(len(modfile_miss_ind))]
 
-os.chdir('/Users/binfang/Downloads/bash_codes/missed')
-file = open('smap_2019_miss.txt', 'w')
-with open('smap_2019_miss.txt', 'w') as f:
+os.chdir('/Users/binfang/Downloads/Processing/bash_codes/download/missed')
+file = open('modis_miss.txt', 'w')
+with open('modis_miss.txt', 'w') as f:
     for item in modfile_miss_url:
         f.write("%s" % item)
 f.close()
@@ -269,84 +283,34 @@ plt.subplots_adjust(left=0.05, right=0.9, bottom=0.05, top=0.85, hspace=0.35, ws
 plt.savefig('/Users/binfang/Downloads/piechart.tif')
 plt.close()
 
-
-
-########################################################################################################################
-# 4. Subset the 1 km downscaled SMAP SM data
-
-# Bounding box of Peru
-# (-18.3479753557, -81.4109425524, -0.0572054988649, -68.6650797187)
-lat_peru_max = -0.05
-lat_peru_min = -18.35
-lon_peru_max = -68.66
-lon_peru_min = -81.42
-output_crs = 'EPSG:4326'
-[lat_peru_ease_1km, row_peru_ease_1km_ind, lon_peru_ease_1km, col_peru_ease_1km_ind] = coordtable_subset\
-    (lat_world_ease_1km, lon_world_ease_1km, lat_peru_max, lat_peru_min, lon_peru_max, lon_peru_min)
-
-for iyr in range(len(yearname)):
-    smap_file_path = path_smap_sm_ds + '/' + str(yearname[iyr])
-    smap_file_list = sorted(glob.glob(smap_file_path + '/*'))
-
-    for idt in range(len(smap_file_list)):
-        src_tf = rasterio.open(smap_file_list[idt])
-
-        # Subset the SM data by bounding box
-        sub_window_1km = Window(col_peru_ease_1km_ind[0], row_peru_ease_1km_ind[0],
-                                len(col_peru_ease_1km_ind), len(row_peru_ease_1km_ind))
-        kwargs_1km_sub = src_tf.meta.copy()
-        kwargs_1km_sub.update({
-            'height': sub_window_1km.height,
-            'width': sub_window_1km.width,
-            'transform': rasterio.windows.transform(sub_window_1km, src_tf.transform)})
-
-        # Write to Geotiff file
-        with rasterio.open('/Users/binfang/Downloads/Processing/smap_sm_peru/' + str(yearname[iyr]) +
-                           '/' + os.path.basename(smap_file_list[idt]), 'w', **kwargs_1km_sub) as output_ds:
-            output_ds.write(src_tf.read(window=sub_window_1km))
-
-        print(os.path.basename(smap_file_list[idt]))
-
-
-
-os.chdir('/Users/binfang/Downloads')
-
-ds = open('_Clim_Pred_LRF_New_GridDataDownload_Rainfall_ind2019_rfp25.grd', 'r')
-array = np.fromfile(ds, dtype=np.dtype('f8'))
-ds1[ds1<-1] = np.nan
-
-array = np.fromfile('_Clim_Pred_LRF_New_GridDataDownload_Rainfall_ind2019_rfp25.grd')
-
-
-
+# ########################################################################################################################
+# # 1.3 Locate the land cover/soil type by lat/lon of in-situ data
+# ismn_land_list = sorted(glob.glob(path_processed + '/landcover/[A-Z]*.xlsx'))
+#
+# df_land_all = []
+# for ife in range(14, len(ismn_land_list)):
+#     df_land = pd.read_excel(ismn_land_list[ife], index_col=0)
+#     df_land_all.append(df_land)
+#     del(df_land)
+#     print(ife)
+#
+# df_land_desc = pd.concat(df_land_all)
+#
 
 ########################################################################################################################
-# 1.3 Locate the land cover/soil type by lat/lon of in-situ data
-ismn_land_list = sorted(glob.glob(path_processed + '/landcover/[A-Z]*.xlsx'))
-
-df_land_all = []
-for ife in range(14, len(ismn_land_list)):
-    df_land = pd.read_excel(ismn_land_list[ife], index_col=0)
-    df_land_all.append(df_land)
-    del(df_land)
-    print(ife)
-
-df_land_desc = pd.concat(df_land_all)
-
-
-########################################################################################################################
-## 2. NN training
-data_table = pd.read_excel('/Users/binfang/Downloads/Data File -5-23.xlsx', index_col=None, header=[1])
-data_table = data_table.drop(data_table.index[[54, 78]])
+## 4. NN training
+data_table = pd.read_excel('/Users/binfang/Downloads/Processing/NN_training/Data File -7-18.xlsx', index_col=None, header=[1])
+# data_table = data_table.drop(data_table.index[[54, 78]])
 # data_table = data_table.drop(data_table.index[54:])
+
 
 x = data_table.drop(['K (m/s)'], axis=1)
 y = data_table['K (m/s)']
 
-# Imputate the input array
-imp_mean = SimpleImputer(missing_values=np.nan, strategy='mean')
-imp_mean.fit(x)
-x = imp_mean.transform(x)
+# # Imputate the input array
+# imp_mean = SimpleImputer(missing_values=np.nan, strategy='mean')
+# imp_mean.fit(x)
+# x = imp_mean.transform(x)
 
 # Normalize input array, and calculate base-10 logarithm of y
 x_norm = preprocessing.normalize(x)
@@ -355,7 +319,7 @@ y_log = np.log10(y)
 x_train, x_test, y_train, y_test = train_test_split(x_norm, y_log, test_size=0.25, random_state=42)
 
 
-regr = MLPRegressor(solver='lbfgs', alpha=0.0001, hidden_layer_sizes=(30, 30, 30), max_iter=1000)
+regr = MLPRegressor(solver='lbfgs', alpha=0.0001, hidden_layer_sizes=(30, 30, 30), max_iter=5000)
 regr.fit(x_train, y_train)
 regr.score(x_train, y_train)
 y_pred = regr.predict(x_test)
@@ -366,18 +330,20 @@ plt.scatter(y_test, y_pred)
 plt.plot(y_test, intercept+slope*y_test, '-', color='m')
 plt.xlim(np.min(y_test)*1.05, np.max(y_test)*1.05)
 plt.ylim(np.min(y_test)*1.05, np.max(y_test)*1.05)
+plt.plot(plt.xlim(), plt.ylim(), ls="--", c=".3")
+plt.grid(linestyle='--')
 plt.xlabel('Target Test')
 plt.ylabel('Target Pred')
-plt.text(-11.5, -8, 'R=' + str(round(r_value, 3)), ha='center', fontsize=16, fontweight='bold')
+plt.text(-10, -6, 'R=' + str(round(r_value, 3)), ha='center', fontsize=16, fontweight='bold')
 
 
-slope, intercept, r_value, p_value, std_err = stats.linregress(10**y_test, 10**y_pred)
-plt.scatter(10**y_test, 10**y_pred)
-plt.plot(10**y_test, intercept+slope*10**y_test, '-', color='m')
-plt.xlim(np.min(10**y_test)*1.1, np.max(10**y_test)*1.1)
-plt.ylim(np.min(10**y_test)*1.1, np.max(10**y_test)*1.1)
-plt.xlabel('Target Test')
-plt.ylabel('Target Pred')
+df_data = pd.DataFrame({'y_test': np.array(y_test),
+                        'y_pred': y_pred})
+writer = pd.ExcelWriter('/Users/binfang/Downloads/nn_data.xlsx')
+df_data.to_excel(writer)
+writer.save()
+
+
 
 
 # clf = MLPClassifier(hidden_layer_sizes=(30, 30, 30), max_iter=1000, alpha=0.0001,
@@ -385,3 +351,231 @@ plt.ylabel('Target Pred')
 # y_train_arr = np.asarray(y_train, dtype='|S6')
 # clf.fit(x_train, y_train_arr)
 # y_pred = clf.predict(x_test)
+
+########################################################################################################################
+# 5. Define a function to find the matched gantry id and assigned to the corresponding car GPS points
+def gps_identifier(path_main, file_gantry, file_car, file_car_output):
+
+    # Read the gantry and car coordinates files
+    grid_size = 0.01  # 1km ~= 0.01 degree, half of the grid size is 0.005 degree (500 m)
+
+    df_gantry = pd.read_csv(path_main + file_gantry, delim_whitespace=True)
+    f_vc_lat = np.array(df_gantry['f_vc_lat'])
+    f_vc_lon = np.array(df_gantry['f_vc_lon'])
+    # Calculate max/min lat/lon for each gantry grid using half grid size
+    f_vc_lat_min = f_vc_lat - grid_size/2
+    f_vc_lat_max = f_vc_lat + grid_size/2
+    f_vc_lon_min = f_vc_lon - grid_size/2
+    f_vc_lon_max = f_vc_lon + grid_size/2
+
+    df_car = pd.read_csv(path_main + file_car, index_col=0, sep=',')
+    car_lon = np.array(df_car['F_LONGITUDE'])
+    car_lat = np.array(df_car['F_LATITUDE'])
+
+    # Find the car GPS points dropped in any single gantry point
+    coord_drop = [np.where((car_lat <= f_vc_lat_max[x]) & (car_lat >= f_vc_lat_min[x])
+                           & (car_lon <= f_vc_lon_max[x]) & (car_lon >= f_vc_lon_min[x]))[0]
+                  for x in range(len(f_vc_lat_max))]
+
+    # Find the gantry points containing car GPS points (by determining the list of gantry points are not empty)
+    coord_drop_len = np.array([len(coord_drop[x]) for x in range(len(coord_drop))])
+    coord_drop_len_nonzero_ind = np.where(coord_drop_len != 0)[0]
+
+    # Create a new field and find the matched gantry id for the car GPS points dropped in it and add it to the new field
+    # The field will be appended to the car GPS table
+    nan_array = np.empty(len(car_lon))
+    nan_array[:] = np.nan
+    df_newfield = pd.DataFrame({'f_vc_gantry_id': nan_array})
+    for x in range(len(coord_drop_len_nonzero_ind)):
+        df_newfield.iloc[coord_drop[coord_drop_len_nonzero_ind[x]]] = \
+            df_gantry['f_vc_gantry_id'].iloc[coord_drop_len_nonzero_ind[x]]
+
+    # Join the new field to the car GPS dataframe
+    df_car.reset_index(inplace=True, drop=True)
+    df_newfield.reset_index(inplace=True, drop=True)
+
+    df_car_edited = pd.concat([df_car, df_newfield], axis=1)
+    df_car_edited_output = df_car_edited.to_csv(path_main + file_car_output)
+
+    return df_car_edited_output
+
+
+########################################################################################################################
+# Test
+import pandas as pd
+import numpy as np
+
+path_main_test = '/Users/binfang/Downloads/Processing/car_coords'
+file_gantry_test = '/gantry_locations.csv'
+file_car_test = '/suA8J27S.csv'
+file_car_output_test = file_car_test.split('.')[0] + '_new.' + file_car_test.split('.')[1]
+
+gps_identifier(path_main_test, file_gantry_test, file_car_test, file_car_output_test)
+
+
+########################################################################################################################
+#6. Subset SMAP 1 km/9 km data
+shapefile = fiona.open(path_shp + '/Indochina_boundary/Indochina_boundary.shp', 'r')
+crop_shape = [feature["geometry"] for feature in shapefile]
+shp_extent = list(shapefile.bounds)
+
+lat_sub_max = shp_extent[3]
+lat_sub_min = shp_extent[1]
+lon_sub_max = shp_extent[2]
+lon_sub_min = shp_extent[0]
+
+output_crs = 'EPSG:4326'
+[lat_sub_ease_1km, row_sub_ease_1km_ind, lon_sub_ease_1km, col_sub_ease_1km_ind] = coordtable_subset\
+    (lat_world_ease_1km, lon_world_ease_1km, lat_sub_max, lat_sub_min, lon_sub_max, lon_sub_min)
+[lat_sub_ease_9km, row_sub_ease_9km_ind, lon_sub_ease_9km, col_sub_ease_9km_ind] = coordtable_subset\
+    (lat_world_ease_9km, lon_world_ease_9km, lat_sub_max, lat_sub_min, lon_sub_max, lon_sub_min)
+
+# 1 km
+for iyr in range(4, len(yearname)):
+    smap_file_path = path_smap + '/1km/gldas/' + str(yearname[iyr])
+    smap_file_list = sorted(glob.glob(smap_file_path + '/*'))
+
+    for idt in range(len(smap_file_list)):
+        src_tf = rasterio.open(smap_file_list[idt])
+
+        # Subset the SM data by bounding box
+        sub_window_1km = Window(col_sub_ease_1km_ind[0], row_sub_ease_1km_ind[0],
+                                len(col_sub_ease_1km_ind), len(row_sub_ease_1km_ind))
+        kwargs_1km_sub = src_tf.meta.copy()
+        kwargs_1km_sub.update({
+            'height': sub_window_1km.height,
+            'width': sub_window_1km.width,
+            'transform': rasterio.windows.transform(sub_window_1km, src_tf.transform)})
+
+        # Write to Geotiff file
+        with rasterio.open(path_output + '/1km/' + \
+                           os.path.basename(smap_file_list[idt]), 'w', **kwargs_1km_sub) as output_ds:
+            output_ds.write(src_tf.read(window=sub_window_1km))
+
+        print(os.path.basename(smap_file_list[idt]))
+
+
+# 9 km
+col_coor_sub = -17367530.44516138 + col_sub_ease_9km_ind[0].item() * interdist_ease_9km
+row_coor_sub = 7314540.79258289 - row_sub_ease_9km_ind[0].item() * interdist_ease_9km
+
+profile = {'driver': 'GTiff', 'dtype': 'float32', 'nodata': 0.0, 'width': len(lon_sub_ease_9km),
+           'height': len(lat_sub_ease_9km), 'count': 2, 'crs': CRS.from_dict(init='epsg:6933'),
+           'transform': Affine(interdist_ease_9km, 0.0, col_coor_sub, 0.0, -interdist_ease_9km, row_coor_sub)}
+
+for iyr in range(4, len(yearname)):
+    for imo in range(len(monthname)):
+        hdf_file_smap_9km = path_smap + '/9km' + '/smap_sm_9km_' + str(yearname[iyr]) + monthname[imo] + '.hdf5'
+        if os.path.exists(hdf_file_smap_9km) == True:
+            f_read_smap_9km = h5py.File(hdf_file_smap_9km, "r")
+            varname_list_smap_9km = list(f_read_smap_9km.keys())
+            smap_9km_load_am = f_read_smap_9km[varname_list_smap_9km[0]][row_sub_ease_9km_ind[0]:row_sub_ease_9km_ind[-1]+1,
+                    col_sub_ease_9km_ind[0]:col_sub_ease_9km_ind[-1]+1, :]
+            smap_9km_load_pm = f_read_smap_9km[varname_list_smap_9km[1]][row_sub_ease_9km_ind[0]:row_sub_ease_9km_ind[-1]+1,
+                    col_sub_ease_9km_ind[0]:col_sub_ease_9km_ind[-1]+1, :]
+            f_read_smap_9km.close()
+
+            for idt in range(smap_9km_load_am.shape[2]):
+                dst = np.stack([smap_9km_load_am[:, :, idt], smap_9km_load_pm[:, :, idt]], axis=0)
+                day_str = str(yearname[iyr]) + '-' + monthname[imo] + '-' + str(idt+1).zfill(2)
+                dst_writer = rasterio.open(path_output + '/9km' + '/smap_sm_9km_' + str(yearname[iyr]) + \
+                                           str(datetime.datetime.strptime(day_str, '%Y-%m-%d').timetuple().tm_yday).zfill(3) + '.tif',
+                                   'w', **profile)
+                dst_writer.write(dst)
+                dst_writer = None
+
+                print(day_str)
+                del(day_str, dst_writer, dst)
+
+            del (smap_9km_load_am, smap_9km_load_pm, f_read_smap_9km)
+
+        else:
+            pass
+
+
+
+########################################################################################################################
+# 7.1 Generate the coordinates table for SMAP data
+import fiona
+import pandas as pd
+import numpy as np
+import h5py
+import glob
+import rasterio
+
+#########################################################################################
+# (Function 1) Subset the coordinates table of desired area
+
+def coordtable_subset(lat_input, lon_input, lat_extent_max, lat_extent_min, lon_extent_max, lon_extent_min):
+    lat_output = lat_input[np.where((lat_input <= lat_extent_max) & (lat_input >= lat_extent_min))]
+    row_output_ind = np.squeeze(np.array(np.where((lat_input <= lat_extent_max) & (lat_input >= lat_extent_min))))
+    lon_output = lon_input[np.where((lon_input <= lon_extent_max) & (lon_input >= lon_extent_min))]
+    col_output_ind = np.squeeze(np.array(np.where((lon_input <= lon_extent_max) & (lon_input >= lon_extent_min))))
+
+    return lat_output, row_output_ind, lon_output, col_output_ind
+
+#########################################################################################
+path_hdf = '/Users/binfang/Documents/SMAP_Project/smap_codes/coords_table.hdf5'
+path_shp = '/Users/binfang/Downloads/Processing/shapefiles/Indochina_boundary/Indochina_boundary.shp'
+path_smap_file = '/Users/binfang/Downloads/Processing/smap_output/1km_ic'
+path_smap_coord = '/Users/binfang/Downloads/Processing/Indochina/grid_coords.csv'
+path_smap_data = '/Users/binfang/Downloads/Processing/Indochina/smap_sm_data.csv'
+
+f = h5py.File(path_hdf, 'r')
+varname_list = list(f.keys())
+for x in range(len(varname_list)):
+    var_obj = f[varname_list[x]][()]
+    exec(varname_list[x] + '= var_obj')
+f.close()
+
+shapefile = fiona.open(path_shp, 'r')
+crop_shape = [feature["geometry"] for feature in shapefile]
+shp_extent = list(shapefile.bounds)
+
+lat_sub_max = shp_extent[3]
+lat_sub_min = shp_extent[1]
+lon_sub_max = shp_extent[2]
+lon_sub_min = shp_extent[0]
+
+[lat_sub_ease_1km, row_sub_ease_1km_ind, lon_sub_ease_1km, col_sub_ease_1km_ind] = coordtable_subset\
+    (lat_world_ease_1km, lon_world_ease_1km, lat_sub_max, lat_sub_min, lon_sub_max, lon_sub_min)
+[lon_sub_ease_1km_mesh, lat_sub_ease_1km_mesh] = np.meshgrid(lon_sub_ease_1km, lat_sub_ease_1km)
+lon_sub_ease_1km_mesh = lon_sub_ease_1km_mesh.flatten()
+lat_sub_ease_1km_mesh = lat_sub_ease_1km_mesh.flatten()
+id_array = np.arange(len(lon_sub_ease_1km_mesh))
+
+df_smap_grids = pd.DataFrame({'GridID': id_array,
+                              'Latitude': lat_sub_ease_1km_mesh,
+                              'Longitude':lon_sub_ease_1km_mesh})
+df_smap_grids.to_csv(path_smap_coord)
+
+# 7.2 Write the SMAP SM data to the table
+smap_file_list = sorted(glob.glob(path_smap_file + '/*.tif'))
+
+# Write the first day's data to the table
+date_id = int(smap_file_list[0].split('.')[0][-7:])
+src_tf = rasterio.open(smap_file_list[0]).read()
+src_tf = np.nanmean(src_tf, axis=0).flatten()
+src_tf = src_tf.reshape(1, -1)
+id_array_str = [str(id_array[x]) for x in range(len(id_array))]
+df_tf = pd.DataFrame(src_tf, index=[date_id], columns=id_array_str)
+df_tf.to_csv(path_smap_data, mode='w')
+del(id_array)
+
+# Write the rest days to the table
+for idt in range(1, len(smap_file_list)):
+    date_id = int(smap_file_list[idt].split('.')[0][-7:])
+    src_tf = rasterio.open(smap_file_list[idt]).read()
+    src_tf = np.nanmean(src_tf, axis=0).flatten()
+    src_tf = src_tf.reshape(1, -1)
+    df_tf = pd.DataFrame(src_tf, index=[date_id], columns=id_array_str)
+    df_tf.to_csv(path_smap_data, mode='a', header=False)
+    print(smap_file_list[idt])
+    del(date_id, src_tf, df_tf)
+
+
+# var_name = ['lat_world_ease_1km', 'lon_world_ease_1km']
+# with h5py.File('/Users/binfang/Documents/SMAP_Project/smap_codes/coords_table.hdf5', 'w') as f:
+#     for x in var_name:
+#         f.create_dataset(x, data=eval(x))
+# f.close()
