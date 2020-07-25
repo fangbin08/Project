@@ -344,13 +344,23 @@ df_data.to_excel(writer)
 writer.save()
 
 
-
-
 # clf = MLPClassifier(hidden_layer_sizes=(30, 30, 30), max_iter=1000, alpha=0.0001,
 #                      solver='lbfgs', verbose=10,  random_state=42,tol=0.000000001)
 # y_train_arr = np.asarray(y_train, dtype='|S6')
 # clf.fit(x_train, y_train_arr)
 # y_pred = clf.predict(x_test)
+
+#######################################################################################################################
+from scipy.interpolate import interp1d
+# EASE 400 m
+lon_world_ease_400m = np.linspace(lon_world_min, lon_world_max, num=size_world_ease_400m[1]+1)
+lon_world_ease_400m = lon_world_ease_400m + (lon_world_ease_400m[1]-lon_world_ease_400m[0])/2
+lon_world_ease_400m = lon_world_ease_400m[:-1]
+# Interpolate the EASE 1 km lat/lon tables to generate 400 km lat/lon tables
+x = np.linspace(0, 10, num=len(lat_world_ease_1km))
+f_400m = interp1d(x, lat_world_ease_1km, kind='cubic')
+x_new = np.linspace(0, 10, num=size_world_ease_400m[0])
+lat_world_ease_400m = f_400m(x_new)
 
 ########################################################################################################################
 # 5. Define a function to find the matched gantry id and assigned to the corresponding car GPS points
@@ -503,7 +513,7 @@ import h5py
 import glob
 import rasterio
 
-#########################################################################################
+########################################################################################################################
 # (Function 1) Subset the coordinates table of desired area
 
 def coordtable_subset(lat_input, lon_input, lat_extent_max, lat_extent_min, lon_extent_max, lon_extent_min):
@@ -514,7 +524,7 @@ def coordtable_subset(lat_input, lon_input, lat_extent_max, lat_extent_min, lon_
 
     return lat_output, row_output_ind, lon_output, col_output_ind
 
-#########################################################################################
+########################################################################################################################
 path_hdf = '/Users/binfang/Documents/SMAP_Project/smap_codes/coords_table.hdf5'
 path_shp = '/Users/binfang/Downloads/Processing/shapefiles/Indochina_boundary/Indochina_boundary.shp'
 path_smap_file = '/Users/binfang/Downloads/Processing/smap_output/1km_ic'
@@ -579,3 +589,4 @@ for idt in range(1, len(smap_file_list)):
 #     for x in var_name:
 #         f.create_dataset(x, data=eval(x))
 # f.close()
+

@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import h5py
+from pyproj import Proj, transform
 
 #########################################################################################################
 # (Function 1) Define a function for generating EASE grid projection lat/lon tables from CATDS provided data
@@ -56,8 +57,34 @@ def geo2easeGridV2(latitude, longitude, interdist, num_row, num_col):
 
     return row, column
 
+##########################################################################################################
+# (Function 3) Generate lat/lon tables of grid locations for EASE Grid projection V2.0 at different resolutions (km)
+
+def coords_easeGridV2(interdist, size_world_ease):
+    x_min = x0 + interdist*0.5
+    y_max = y0 - interdist*0.5
+    x_max = x_min + (size_world_ease[1]-1)*interdist
+    y_min = y_max - (size_world_ease[0]-1)*interdist
+
+    x_array = np.linspace(x_min, x_max, num=size_world_ease[1])
+    y_array = np.linspace(y_max, y_min, num=size_world_ease[0])
+    y_array_meshgrid_1, x_array_meshgrid_1 = np.meshgrid(y_array[0], x_array)
+    y_array_meshgrid_2, x_array_meshgrid_2 = np.meshgrid(y_array, x_array[0])
+
+    prj_in = Proj(init='epsg:6933')
+    prj_out = Proj(init='epsg:4326')
+    [x_array_deg1, y_array_deg1] = transform(prj_in,prj_out,x_array_meshgrid_1,y_array_meshgrid_1)
+    [x_array_deg2, y_array_deg2] = transform(prj_in,prj_out,x_array_meshgrid_2,y_array_meshgrid_2)
+    y_array_deg2 = y_array_deg2.reshape(-1, 1)
+
+    x_array_deg1 = np.squeeze(x_array_deg1)
+    y_array_deg2 = np.squeeze(y_array_deg2)
+
+    return x_array_deg1, y_array_deg2
+
+
 #########################################################################################
-# (Function 3) Subset the coordinates table of desired area
+# (Function 4) Subset the coordinates table of desired area
 
 def coordtable_subset(lat_input, lon_input, lat_extent_max, lat_extent_min, lon_extent_max, lon_extent_min):
     lat_output = lat_input[np.where((lat_input <= lat_extent_max) & (lat_input >= lat_extent_min))]
@@ -68,7 +95,7 @@ def coordtable_subset(lat_input, lon_input, lat_extent_max, lat_extent_min, lon_
     return lat_output, row_output_ind, lon_output, col_output_ind
 
 #########################################################################################
-# (Function 4) Generate lat/lon tables of Geographic projection in world/CONUS
+# (Function 5) Generate lat/lon tables of Geographic projection in world/CONUS
 
 def geo_coord_gen(lat_geo_extent_max, lat_geo_extent_min, lon_geo_extent_max, lon_geo_extent_min, cellsize):
     lat_geo_output = np.linspace(lat_geo_extent_max - cellsize / 2, lat_geo_extent_min + cellsize / 2,
@@ -81,7 +108,7 @@ def geo_coord_gen(lat_geo_extent_max, lat_geo_extent_min, lon_geo_extent_max, lo
     return lat_geo_output, lon_geo_output
 
 #########################################################################################
-# (Function 5) Find and map the corresponding index numbers for the high spatial resolution
+# (Function 6) Find and map the corresponding index numbers for the high spatial resolution
 # row/col tables from the low spatial resolution row/col tables. The output is 1-dimensional
 # array containing index numbers. (Disaggregate)
 
@@ -131,7 +158,7 @@ def find_easeind_hifrlo(lat_hires, lon_hires, interdist_lowres, num_row_lowres, 
     return row_ind_dest, col_ind_dest
 
 #########################################################################################
-# (Function 6) Find and map the corresponding index numbers for the low spatial resolution
+# (Function 7) Find and map the corresponding index numbers for the low spatial resolution
 # row/col tables from the high spatial resolution row/col tables. The output is 1-dimensional
 # nested list array containing index numbers. (Aggregate)
 
@@ -185,7 +212,7 @@ def find_easeind_lofrhi(lat_hires, lon_hires, interdist_lowres, num_row_lowres, 
     return row_ease_dest_ind, col_ease_dest_ind
 
 #########################################################################################
-# (Function 7) Find and map the corresponding index numbers for the low spatial resolution
+# (Function 8) Find and map the corresponding index numbers for the low spatial resolution
 # row/col tables from the high spatial resolution row/col tables. The output is 1-dimensional
 # nested list array containing index numbers. (For 33 km SMAP grid extension only)
 
@@ -264,7 +291,6 @@ def find_easeind_lofrhi_ext33km(lat_hires, lon_hires, interdist_lowres,
     return row_ease_dest_ind_new, col_ease_dest_ind_new
 
 
-
 #########################################################################################
 # 0. Input variables
 
@@ -305,13 +331,16 @@ size_world_ease_25km = np.array([584, 1388])
 size_world_ease_36km = np.array([406, 964])
 
 # Interdistance of EASE grid projection grids
-interdist_ease_400m = 400.4041601296
+interdist_ease_400m = 400.358009339824
 interdist_ease_1km = 1000.89502334956
 interdist_ease_9km = 9009.093602916
 interdist_ease_12_5km = 12512.63000405
 interdist_ease_25km = 25067.525
 interdist_ease_36km = 36036.374411664
 
+# x, y axis map coordinates of the outer edge of the upper-left pixel
+x0 = -17367530.45
+y0 = 7314540.83
 
 #######################################################################################
 # 1. Generate lat/lon tables of EASE Grid projection in the world
@@ -359,6 +388,9 @@ num_col = size_world_ease_36km[1]
 [lat_world_ease_36km, lon_world_ease_36km] = \
     ease_coord_gen(path_ease_lat, path_ease_lon, num_row, num_col)
 
+# EASE 400 m
+[lon_world_ease_400m, lat_world_ease_400m] = coords_easeGridV2(interdist_ease_400m, size_world_ease_400m)
+
 
 # Save variables
 os.chdir(path_workspace)
@@ -368,7 +400,8 @@ var_name = ['cellsize_400m', 'cellsize_1km', 'cellsize_5km', 'cellsize_9km',
             'interdist_ease_25km', 'interdist_ease_36km', 'lat_conus_max',
             'lat_conus_min', 'lon_conus_max', 'lon_conus_min',
             'lat_world_max', 'lat_world_min', 'lon_world_max',
-            'lon_world_min', 'lat_world_ease_1km', 'lon_world_ease_1km',
+            'lon_world_min',  'lat_world_ease_400m', 'lon_world_ease_400m',
+            'lat_world_ease_1km', 'lon_world_ease_1km',
             'lat_world_ease_9km', 'lon_world_ease_9km', 'lat_world_ease_12_5km',
             'lon_world_ease_12_5km', 'lat_world_ease_25km', 'lon_world_ease_25km',
             'lat_world_ease_36km', 'lon_world_ease_36km', 'size_world_ease_400m',
@@ -385,7 +418,8 @@ print('Section 1 is completed')
 
 #######################################################################################
 # 2. Subset the lat/lon tables of EASE Grid at different spatial resolution in CONUS/world regions
-
+[lat_conus_ease_400m, row_conus_ease_400m_ind, lon_conus_ease_400m, col_conus_ease_400m_ind] = coordtable_subset\
+    (lat_world_ease_400m, lon_world_ease_400m, lat_conus_max, lat_conus_min, lon_conus_max, lon_conus_min)
 [lat_conus_ease_1km, row_conus_ease_1km_ind, lon_conus_ease_1km, col_conus_ease_1km_ind] = coordtable_subset\
     (lat_world_ease_1km, lon_world_ease_1km, lat_conus_max, lat_conus_min, lon_conus_max, lon_conus_min)
 [lat_conus_ease_9km, row_conus_ease_9km_ind, lon_conus_ease_9km, col_conus_ease_9km_ind] = coordtable_subset\
@@ -397,6 +431,8 @@ print('Section 1 is completed')
 [lat_conus_ease_36km, row_conus_ease_36km_ind, lon_conus_ease_36km, col_conus_ease_36km_ind] = coordtable_subset\
     (lat_world_ease_36km, lon_world_ease_36km, lat_conus_max, lat_conus_min, lon_conus_max, lon_conus_min)
 
+row_world_ease_400m_ind = np.arange(len(lat_world_ease_400m))
+col_world_ease_400m_ind = np.arange(len(lon_world_ease_400m))
 row_world_ease_1km_ind = np.arange(len(lat_world_ease_1km))
 col_world_ease_1km_ind = np.arange(len(lon_world_ease_1km))
 row_world_ease_9km_ind = np.arange(len(lat_world_ease_9km))
@@ -406,11 +442,12 @@ col_world_ease_25km_ind = np.arange(len(lon_world_ease_25km))
 row_world_ease_36km_ind = np.arange(len(lat_world_ease_36km))
 col_world_ease_36km_ind = np.arange(len(lon_world_ease_36km))
 
-
 #######################################################################################
 # 3. Generate lat/lon tables of Geographic projection in world/CONUS
 
 # World extent
+[lat_world_geo_400m, lon_world_geo_400m] = geo_coord_gen\
+    (lat_world_max, lat_world_min, lon_world_max, lon_world_min, cellsize_400m)
 [lat_world_geo_1km, lon_world_geo_1km] = geo_coord_gen\
     (lat_world_max, lat_world_min, lon_world_max, lon_world_min, cellsize_1km)
 [lat_world_geo_5km, lon_world_geo_5km] = geo_coord_gen\
@@ -423,6 +460,8 @@ col_world_ease_36km_ind = np.arange(len(lon_world_ease_36km))
     (lat_world_max, lat_world_min, lon_world_max, lon_world_min, cellsize_25km)
 
 # CONUS extent
+[lat_conus_geo_400m, row_conus_geo_400m_ind, lon_conus_geo_400m, col_conus_geo_400m_ind] = coordtable_subset\
+    (lat_world_geo_400m, lon_world_geo_400m, lat_conus_max, lat_conus_min, lon_conus_max, lon_conus_min)
 [lat_conus_geo_1km, row_conus_geo_1km_ind, lon_conus_geo_1km, col_conus_geo_1km_ind] = coordtable_subset\
     (lat_world_geo_1km, lon_world_geo_1km, lat_conus_max, lat_conus_min, lon_conus_max, lon_conus_min)
 [lat_conus_geo_5km, row_conus_geo_5km_ind, lon_conus_geo_5km, col_conus_geo_5km_ind] = coordtable_subset\
@@ -434,22 +473,24 @@ col_world_ease_36km_ind = np.arange(len(lon_world_ease_36km))
 
 
 # Save new generated variables from section 2 & 3 to parameters.hdf5
-var_name_2_3 = ['lat_conus_ease_1km', 'lon_conus_ease_1km', 'lat_conus_ease_9km', 'lon_conus_ease_9km',
-                'lat_conus_ease_12_5km', 'lon_conus_ease_12_5km', 'lat_conus_ease_25km', 'lon_conus_ease_25km',
-                'lat_conus_ease_36km', 'lon_conus_ease_36km', 'lat_world_geo_1km', 'lon_world_geo_1km',
-                'lat_world_geo_5km', 'lon_world_geo_5km', 'lat_world_geo_12_5km', 'lon_world_geo_12_5km',
-                'lat_world_geo_10km', 'lon_world_geo_10km',
-                'lat_world_geo_25km', 'lon_world_geo_25km', 'lat_conus_geo_1km', 'lon_conus_geo_1km',
+var_name_2_3 = ['lat_conus_ease_400m', 'lon_conus_ease_400m', 'lat_conus_ease_1km', 'lon_conus_ease_1km',
+                'lat_conus_ease_9km', 'lon_conus_ease_9km', 'lat_conus_ease_12_5km', 'lon_conus_ease_12_5km',
+                'lat_conus_ease_25km', 'lon_conus_ease_25km', 'lat_conus_ease_36km', 'lon_conus_ease_36km',
+                'lat_world_geo_400m', 'lon_world_geo_400m', 'lat_world_geo_1km', 'lon_world_geo_1km',
+                'lat_world_geo_5km', 'lon_world_geo_5km', 'lat_world_geo_10km', 'lon_world_geo_10km',
+                'lat_world_geo_12_5km', 'lon_world_geo_12_5km', 'lat_world_geo_25km', 'lon_world_geo_25km',
+                'lat_conus_geo_400m', 'lon_conus_geo_400m', 'lat_conus_geo_1km', 'lon_conus_geo_1km',
                 'lat_conus_geo_5km', 'lon_conus_geo_5km', 'lat_conus_geo_12_5km', 'lon_conus_geo_12_5km',
-                'lat_conus_geo_25km', 'lon_conus_geo_25km', 'row_conus_ease_1km_ind', 'col_conus_ease_1km_ind',
-                'row_conus_ease_9km_ind', 'col_conus_ease_9km_ind', 'row_conus_ease_12_5km_ind',
-                'col_conus_ease_12_5km_ind', 'row_conus_ease_25km_ind', 'col_conus_ease_25km_ind',
-                'row_conus_ease_36km_ind', 'col_conus_ease_36km_ind', 'row_conus_geo_1km_ind',
-                'col_conus_geo_1km_ind', 'row_conus_geo_5km_ind', 'col_conus_geo_5km_ind',
-                'row_conus_geo_12_5km_ind', 'col_conus_geo_12_5km_ind', 'row_conus_geo_25km_ind',
-                'col_conus_geo_25km_ind', 'row_world_ease_1km_ind', 'col_world_ease_1km_ind', 'row_world_ease_9km_ind',
-                'col_world_ease_9km_ind', 'row_world_ease_25km_ind', 'col_world_ease_25km_ind', 'row_world_ease_36km_ind',
-                'col_world_ease_36km_ind']
+                'lat_conus_geo_25km', 'lon_conus_geo_25km',
+                'row_conus_ease_400m_ind', 'col_conus_ease_400m_ind', 'row_conus_ease_1km_ind', 'col_conus_ease_1km_ind',
+                'row_conus_ease_9km_ind', 'col_conus_ease_9km_ind', 'row_conus_ease_12_5km_ind', 'col_conus_ease_12_5km_ind',
+                'row_conus_ease_25km_ind', 'col_conus_ease_25km_ind', 'row_conus_ease_36km_ind', 'col_conus_ease_36km_ind',
+                'row_conus_geo_400m_ind', 'col_conus_geo_400m_ind', 'row_conus_geo_1km_ind', 'col_conus_geo_1km_ind',
+                'row_conus_geo_5km_ind', 'col_conus_geo_5km_ind', 'row_conus_geo_12_5km_ind', 'col_conus_geo_12_5km_ind',
+                'row_conus_geo_25km_ind', 'col_conus_geo_25km_ind',
+                'row_world_ease_400m_ind', 'col_world_ease_400m_ind', 'row_world_ease_1km_ind', 'col_world_ease_1km_ind',
+                'row_world_ease_9km_ind', 'col_world_ease_9km_ind', 'row_world_ease_25km_ind', 'col_world_ease_25km_ind',
+                'row_world_ease_36km_ind', 'col_world_ease_36km_ind']
 
 with h5py.File('ds_parameters.hdf5', 'a') as f:
     for x in var_name_2_3:
@@ -464,6 +505,26 @@ print('Section 2/3 are completed')
 # from the low spatial resolution row/col tables (Disaggregate).
 
 # CONUS
+# For 400 m from 9 km
+[row_conus_ease_400m_from_9km_ind, col_conus_ease_400m_from_9km_ind] = \
+    find_easeind_hifrlo(lat_conus_ease_400m, lon_conus_ease_400m, interdist_ease_9km, size_world_ease_9km[0],
+                        size_world_ease_9km[1], row_conus_ease_9km_ind, col_conus_ease_9km_ind)
+
+# For 400 m from 12.5 km
+[row_conus_ease_400m_from_12_5km_ind, col_conus_ease_400m_from_12_5km_ind] = \
+    find_easeind_hifrlo(lat_conus_ease_400m, lon_conus_ease_400m, interdist_ease_12_5km, size_world_ease_12_5km[0],
+                        size_world_ease_12_5km[1], row_conus_ease_12_5km_ind, col_conus_ease_12_5km_ind)
+
+# For 400 m from 25 km
+[row_conus_ease_400m_from_25km_ind, col_conus_ease_400m_from_25km_ind] = \
+    find_easeind_hifrlo(lat_conus_ease_400m, lon_conus_ease_400m, interdist_ease_25km, size_world_ease_25km[0],
+                        size_world_ease_25km[1], row_conus_ease_25km_ind, col_conus_ease_25km_ind)
+
+# For 400 m from 36 km
+[row_conus_ease_400m_from_36km_ind, col_conus_ease_400m_from_36km_ind] = \
+    find_easeind_hifrlo(lat_conus_ease_400m, lon_conus_ease_400m, interdist_ease_36km, size_world_ease_36km[0],
+                        size_world_ease_36km[1], row_conus_ease_36km_ind, col_conus_ease_36km_ind)
+
 # For 1 km from 9 km
 [row_conus_ease_1km_from_9km_ind, col_conus_ease_1km_from_9km_ind] = \
     find_easeind_hifrlo(lat_conus_ease_1km, lon_conus_ease_1km, interdist_ease_9km, size_world_ease_9km[0],
@@ -508,6 +569,10 @@ print('Section 2/3 are completed')
 # Low resolution: EASE grid projection
 
 # CONUS
+[row_conus_ease_400m_from_geo_400m_ind, col_conus_ease_400m_from_geo_400m_ind] = \
+    find_easeind_lofrhi(lat_conus_geo_400m, lon_conus_geo_400m, interdist_ease_400m,
+                        size_world_ease_400m[0], size_world_ease_400m[1], row_conus_ease_400m_ind, col_conus_ease_400m_ind)
+
 [row_conus_ease_1km_from_geo_1km_ind, col_conus_ease_1km_from_geo_1km_ind] = \
     find_easeind_lofrhi(lat_conus_geo_1km, lon_conus_geo_1km, interdist_ease_1km,
                         size_world_ease_1km[0], size_world_ease_1km[1], row_conus_ease_1km_ind, col_conus_ease_1km_ind)
@@ -544,16 +609,23 @@ print('Section 2/3 are completed')
 
 
 # Save new generated variables from section 4 & 5 to parameters.hdf5
-var_name_4_5 = ['row_conus_ease_1km_from_9km_ind', 'col_conus_ease_1km_from_9km_ind', 'row_conus_ease_1km_from_12_5km_ind',
-                'col_conus_ease_1km_from_12_5km_ind', 'row_conus_ease_1km_from_25km_ind', 'col_conus_ease_1km_from_25km_ind',
-                'row_conus_ease_1km_from_36km_ind', 'col_conus_ease_1km_from_36km_ind', 'row_world_ease_1km_from_9km_ind',
-                'col_world_ease_1km_from_9km_ind', 'row_world_ease_1km_from_25km_ind', 'col_world_ease_1km_from_25km_ind',
+var_name_4_5 = ['row_conus_ease_400m_from_9km_ind', 'col_conus_ease_400m_from_9km_ind',
+                'row_conus_ease_400m_from_12_5km_ind', 'col_conus_ease_400m_from_12_5km_ind',
+                'row_conus_ease_400m_from_25km_ind', 'col_conus_ease_400m_from_25km_ind',
+                'row_conus_ease_400m_from_36km_ind', 'col_conus_ease_400m_from_36km_ind',
+                'row_conus_ease_1km_from_9km_ind', 'col_conus_ease_1km_from_9km_ind',
+                'row_conus_ease_1km_from_12_5km_ind', 'col_conus_ease_1km_from_12_5km_ind',
+                'row_conus_ease_1km_from_25km_ind', 'col_conus_ease_1km_from_25km_ind',
+                'row_conus_ease_1km_from_36km_ind', 'col_conus_ease_1km_from_36km_ind',
+                'row_world_ease_1km_from_9km_ind', 'col_world_ease_1km_from_9km_ind',
+                'row_world_ease_1km_from_25km_ind', 'col_world_ease_1km_from_25km_ind',
                 'row_world_ease_1km_from_36km_ind', 'col_world_ease_1km_from_36km_ind']
-var_name_4_5_vlen = ['row_conus_ease_1km_from_geo_1km_ind', 'col_conus_ease_1km_from_geo_1km_ind',
-                     'row_world_ease_9km_from_1km_ind', 'col_world_ease_9km_from_1km_ind',
+var_name_4_5_vlen = ['row_conus_ease_400m_from_geo_400m_ind', 'col_conus_ease_400m_from_geo_400m_ind',
+                     'row_conus_ease_1km_from_geo_1km_ind', 'col_conus_ease_1km_from_geo_1km_ind',
                      'row_conus_ease_12_5km_from_geo_5km_ind', 'col_conus_ease_12_5km_from_geo_5km_ind',
                      'row_conus_ease_12_5km_from_geo_12_5km_ind', 'col_conus_ease_12_5km_from_geo_12_5km_ind',
                      'row_world_ease_1km_from_geo_1km_ind', 'col_world_ease_1km_from_geo_1km_ind',
+                     'row_world_ease_9km_from_1km_ind', 'col_world_ease_9km_from_1km_ind',
                      'row_world_ease_25km_from_geo_5km_ind', 'col_world_ease_25km_from_geo_5km_ind',
                      'row_world_ease_25km_from_geo_25km_ind', 'col_world_ease_25km_from_geo_25km_ind',
                      'row_world_ease_9km_from_geo_10km_ind', 'col_world_ease_9km_from_geo_10km_ind']
@@ -578,6 +650,8 @@ print('Section 4/5 are completed')
 # from the high spatial resolution row/col tables (Aggregate, 33-km extension)
 
 ext_grid = 12
+
+# For 9 km from 1 km
 [row_conus_ease_9km_from_1km_ext33km_ind, col_conus_ease_9km_from_1km_ext33km_ind] = find_easeind_lofrhi_ext33km\
     (lat_conus_ease_1km, lon_conus_ease_1km, interdist_ease_9km, size_world_ease_9km[0], size_world_ease_9km[1],
      row_conus_ease_9km_ind, col_conus_ease_9km_ind, ext_grid)
@@ -586,9 +660,15 @@ ext_grid = 12
     (lat_world_ease_1km, lon_world_ease_1km, interdist_ease_9km, size_world_ease_9km[0], size_world_ease_9km[1],
      row_world_ease_9km_ind, col_world_ease_9km_ind, ext_grid)
 
+# For 9 km from 400 m
+[row_conus_ease_9km_from_400m_ext33km_ind, col_conus_ease_9km_from_400m_ext33km_ind] = find_easeind_lofrhi_ext33km\
+    (lat_conus_ease_400m, lon_conus_ease_400m, interdist_ease_9km, size_world_ease_9km[0], size_world_ease_9km[1],
+     row_conus_ease_9km_ind, col_conus_ease_9km_ind, ext_grid)
+
 # Save new generated variables from section 6 to parameters.hdf5
 var_name_6_vlen = ['row_conus_ease_9km_from_1km_ext33km_ind', 'col_conus_ease_9km_from_1km_ext33km_ind',
-                   'row_world_ease_9km_from_1km_ext33km_ind', 'col_world_ease_9km_from_1km_ext33km_ind']
+                   'row_world_ease_9km_from_1km_ext33km_ind', 'col_world_ease_9km_from_1km_ext33km_ind',
+                   'row_conus_ease_9km_from_400m_ext33km_ind', 'col_conus_ease_9km_from_400m_ext33km_ind']
 
 # Store variable-length type variables to the parameter file
 dt = h5py.special_dtype(vlen=np.int64)
@@ -598,3 +678,4 @@ with h5py.File('ds_parameters.hdf5', 'a') as f:
 f.close()
 
 print('Section 6 is completed')
+
