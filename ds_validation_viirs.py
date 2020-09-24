@@ -11,6 +11,7 @@ import pandas as pd
 import rasterio
 from scipy import stats
 from statsmodels.graphics.tsaplots import plot_acf
+import skill_metrics as sm
 import cartopy.crs as ccrs
 from cartopy.io.shapereader import Reader
 from cartopy.feature import ShapelyFeature
@@ -402,7 +403,8 @@ for ist in range(len(ismn_sm_am)):
         ubrmse_1 = np.sqrt(np.mean((x - y1_estimated) ** 2))
         bias_1 = np.mean(x - y1)
         conf_int_1 = std_err_1 * 1.96  # From the Z-value
-        stat_array_1 = [number_1, r_sq_1, ubrmse_1, bias_1, p_value_1, conf_int_1]
+        stdev_1 = np.std(y1)
+        stat_array_1 = [number_1, r_sq_1, ubrmse_1, stdev_1, bias_1, p_value_1, conf_int_1]
 
         slope_2, intercept_2, r_value_2, p_value_2, std_err_2 = stats.linregress(x, y2)
         y2_estimated = intercept_2 + slope_2 * x
@@ -411,7 +413,8 @@ for ist in range(len(ismn_sm_am)):
         ubrmse_2 = np.sqrt(np.mean((x - y2_estimated) ** 2))
         bias_2 = np.mean(x - y2)
         conf_int_2 = std_err_2 * 1.96  # From the Z-value
-        stat_array_2 = [number_2, r_sq_2, ubrmse_2, bias_2, p_value_2, conf_int_2]
+        stdev_2 = np.std(y2)
+        stat_array_2 = [number_2, r_sq_2, ubrmse_2, stdev_2, bias_2, p_value_2, conf_int_2]
 
         slope_3, intercept_3, r_value_3, p_value_3, std_err_3 = stats.linregress(x, y3)
         y3_estimated = intercept_3 + slope_3 * x
@@ -420,7 +423,8 @@ for ist in range(len(ismn_sm_am)):
         ubrmse_3 = np.sqrt(np.mean((x - y3_estimated) ** 2))
         bias_3 = np.mean(x - y3)
         conf_int_3 = std_err_3 * 1.96  # From the Z-value
-        stat_array_3 = [number_3, r_sq_3, ubrmse_3, bias_3, p_value_3, conf_int_3]
+        stdev_3 = np.std(y3)
+        stat_array_3 = [number_3, r_sq_3, ubrmse_3, stdev_3, bias_3, p_value_3, conf_int_3]
 
         # if r_sq_1 >= 0.3 and ubrmse_1-ubrmse_3 < 0:
         if ubrmse_1 - ubrmse_3 < 0:
@@ -466,7 +470,7 @@ stat_array_400m = np.array(stat_array_400m)
 stat_array_1km = np.array(stat_array_1km)
 stat_array_9km = np.array(stat_array_9km)
 
-columns_validation = ['number', 'r_sq', 'ubrmse', 'bias', 'p_value', 'conf_int']
+columns_validation = ['number', 'r_sq', 'ubrmse', 'stdev', 'bias', 'p_value', 'conf_int']
 index_validation = df_coords.index[ind_slc_all]
 # index_validation = ['COSMOS', 'SCAN', 'USCRN']
 
@@ -756,14 +760,15 @@ ax2.add_feature(shape_conus)
 sc = ax2.scatter(stn_lon, stn_lat, c=c_rmse_400m, s=40, marker='^', edgecolors='k', cmap='jet')
 sc.set_clim(vmin=0,vmax=0.3)
 cbar = plt.colorbar(sc, extend='both')
-ax2.text(-123, 27, 'RMSE ($\mathregular{m^3/m^3)}$', fontsize=13, fontweight='bold')
-# cbar.set_label('RMSE')
+ax2.text(-123, 27, 'RMSE', fontsize=13, fontweight='bold')
+cbar.set_label('$\mathregular{(m^3/m^3)}$')
 for x in range(len(shp_records)):
     ax2.annotate(s=state_name[x], xy=name_coords[x][0], horizontalalignment='center')
 
 plt.suptitle('400 m', fontsize=19, y=0.97, fontweight='bold')
 plt.savefig(path_results + '/validation/' + '400m_stats_map.png')
 plt.close(fig)
+
 
 
 # 1 km
@@ -787,8 +792,8 @@ ax2.add_feature(shape_conus)
 sc = ax2.scatter(stn_lon, stn_lat, c=c_rmse_1km, s=40, marker='^', edgecolors='k', cmap='jet')
 sc.set_clim(vmin=0, vmax=0.3)
 cbar = plt.colorbar(sc, extend='both')
-ax2.text(-123, 27, 'RMSE ($\mathregular{m^3/m^3)}$', fontsize=13, fontweight='bold')
-# cbar.set_label('RMSE')
+ax2.text(-123, 27, 'RMSE', fontsize=13, fontweight='bold')
+cbar.set_label('$\mathregular{(m^3/m^3)}$')
 for x in range(len(shp_records)):
     ax2.annotate(s=state_name[x], xy=name_coords[x][0], horizontalalignment='center')
 
@@ -817,11 +822,75 @@ ax2.add_feature(shape_conus)
 sc = ax2.scatter(stn_lon, stn_lat, c=c_rmse_9km, s=40, marker='^', edgecolors='k', cmap='jet')
 sc.set_clim(vmin=0, vmax=0.3)
 cbar = plt.colorbar(sc, extend='both')
-ax2.text(-123, 27, 'RMSE ($\mathregular{m^3/m^3)}$', fontsize=13, fontweight='bold')
-# cbar.set_label('RMSE')
+ax2.text(-123, 27, 'RMSE', fontsize=13, fontweight='bold')
+cbar.set_label('$\mathregular{(m^3/m^3)}$')
 for x in range(len(shp_records)):
     ax2.annotate(s=state_name[x], xy=name_coords[x][0], horizontalalignment='center')
 
 plt.suptitle('9 km', fontsize=19, y=0.97, fontweight='bold')
 plt.savefig(path_results + '/validation/' + '9km_stats_map.png')
 plt.close(fig)
+
+
+########################################################################################################################
+# 5. Taylor diagram
+df_stats = pd.read_csv(path_results + '/validation/stat_all.csv', index_col=0)
+stn_coords_ind = [np.where(df_coords.index == df_stats.index[x])[0][0] for x in range(len(df_stats))]
+
+stdev_400m = np.array(df_stats['stdev_400m'])
+rmse_400m = np.array(df_stats['ubrmse_400m'])
+r_400m = np.array(np.sqrt(df_stats['r_sq_400m']))
+stdev_1km = np.array(df_stats['stdev_1km'])
+rmse_1km = np.array(df_stats['ubrmse_1km'])
+r_1km = np.array(np.sqrt(df_stats['r_sq_1km']))
+stdev_9km = np.array(df_stats['stdev_9km'])
+rmse_9km = np.array(df_stats['ubrmse_9km'])
+r_9km = np.array(np.sqrt(df_stats['r_sq_9km']))
+
+# 400 m
+fig = plt.figure(figsize=(7, 14), dpi=100, facecolor='w', edgecolor='k')
+plt.subplots_adjust(left=0.05, right=0.99, bottom=0.05, top=0.9, hspace=0.2, wspace=0.2)
+ax1 = fig.add_subplot(3, 1, 1)
+sm.taylor_diagram(stdev_400m, rmse_400m, r_400m, markerColor='k', markerSize=10, alpha=0.0, markerLegend='off',
+                  tickRMS=np.arange(0, 0.15, 0.03), colRMS='tab:green', styleRMS=':', widthRMS=1.0, titleRMS='on',
+                  titleRMSDangle=40.0, showlabelsRMS='on', tickSTD=np.arange(0, 0.12, 0.03), axismax=0.12,
+                  colSTD='black', styleSTD='-.', widthSTD=1.0, titleSTD='on',
+                  colCOR='tab:blue', styleCOR='--', widthCOR=1.0, titleCOR='on')
+plt.xticks(np.arange(0, 0.15, 0.05))
+ax1.text(0.1, 0.12, '400 m', fontsize=16, fontweight='bold')
+
+# 1 km
+ax2 = fig.add_subplot(3, 1, 2)
+sm.taylor_diagram(stdev_1km, rmse_1km, r_1km, markerColor='k', markerSize=10, alpha=0.0, markerLegend='off',
+                  tickRMS=np.arange(0, 0.15, 0.03), colRMS='tab:green', styleRMS=':', widthRMS=1.0, titleRMS='on',
+                  titleRMSDangle=40.0, showlabelsRMS='on', tickSTD=np.arange(0, 0.12, 0.03), axismax=0.12,
+                  colSTD='black', styleSTD='-.', widthSTD=1.0, titleSTD='on',
+                  colCOR='tab:blue', styleCOR='--', widthCOR=1.0, titleCOR='on')
+plt.xticks(np.arange(0, 0.15, 0.05))
+ax2.text(0.1, 0.12, '1 km', fontsize=16, fontweight='bold')
+
+# 9 km
+ax3 = fig.add_subplot(3, 1, 3)
+sm.taylor_diagram(stdev_9km, rmse_9km, r_9km, markerColor='k', markerSize=10, alpha=0.0, markerLegend='off',
+                  tickRMS=np.arange(0, 0.15, 0.03), colRMS='tab:green', styleRMS=':', widthRMS=1.0, titleRMS='on',
+                  titleRMSDangle=40.0, showlabelsRMS='on', tickSTD=np.arange(0, 0.12, 0.03), axismax=0.12,
+                  colSTD='black', styleSTD='-.', widthSTD=1.0, titleSTD='on',
+                  colCOR='tab:blue', styleCOR='--', widthCOR=1.0, titleCOR='on')
+plt.xticks(np.arange(0, 0.15, 0.05))
+ax3.text(0.1, 0.12, '9 km', fontsize=16, fontweight='bold')
+
+plt.savefig(path_results + '/validation/' + 'td.png')
+
+
+
+
+
+
+
+
+
+
+
+
+
+
