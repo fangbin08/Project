@@ -16,6 +16,7 @@ import cartopy.crs as ccrs
 from cartopy.io.shapereader import Reader
 from cartopy.feature import ShapelyFeature
 from cartopy.mpl.gridliner import LONGITUDE_FORMATTER, LATITUDE_FORMATTER
+import itertools
 
 # Ignore runtime warning
 import warnings
@@ -189,10 +190,18 @@ df_coords = pd.concat(coords_all)
 df_table_am_all = pd.concat(df_table_am_all)
 df_table_pm_all = pd.concat(df_table_pm_all)
 
-new_index = [df_coords.index[x].title() for x in range(len(df_coords.index))]
+new_index = [df_coords.index[x].title() for x in range(len(df_coords.index))] # Capitalize each word
 df_coords.index = new_index
 df_table_am_all.index = new_index
 df_table_pm_all.index = new_index
+
+rec_list = ['Smap-Ok', 'Tony_Grove_Rs', 'Bedford_5_Wnw', 'Harrison_20_Sse', 'John_Day_35_Wnw']
+rec_post_list = ['SMAP-OK', 'Tony_Grove_RS', 'Bedford_5_WNW', 'Harrison_20_SSE', 'John_Day_35_WNW']
+# rec_list_ind = [np.where(df_table_am_all.index == rec_list[x])[0][0] for x in range(len(rec_list))]
+for x in range(1, len(rec_list)):
+    df_table_am_all.rename(index={rec_list[x]: rec_post_list[x]}, inplace=True)
+    df_table_pm_all.rename(index={rec_list[x]: rec_post_list[x]}, inplace=True)
+    df_coords.rename(index={rec_list[x]: rec_post_list[x]}, inplace=True)
 
 
 ########################################################################################################################
@@ -344,7 +353,7 @@ f.close()
 
 
 ########################################################################################################################
-# 2. scatterplots
+# 2. Scatterplots
 # Site ID
 # COSMOS: 0, 11, 25, 28, 34, 36, 42, 44
 # SCAN: 250, 274, 279, 286, 296, 351, 362, 383
@@ -426,7 +435,6 @@ for ist in range(len(ismn_sm_am)):
         stdev_3 = np.std(y3)
         stat_array_3 = [number_3, r_sq_3, ubrmse_3, stdev_3, bias_3, p_value_3, conf_int_3]
 
-        # if r_sq_1 >= 0.3 and ubrmse_1-ubrmse_3 < 0:
         if ubrmse_1 - ubrmse_3 < 0:
             fig = plt.figure(figsize=(11, 6.5))
             fig.subplots_adjust(hspace=0.2, wspace=0.2)
@@ -449,8 +457,8 @@ for ist in range(len(ismn_sm_am)):
             plt.legend(loc='upper left', prop={'size': 13})
             # plt.title(network_name[ist], fontsize=18, fontweight='bold')
             # plt.show()
-            plt.savefig(path_results + '/validation/single_plots/' + df_table_am_all['network'][ist] + '_' + df_table_am_all.index[ist]
-                        + '_(' + str(ist) + ')' + '.png')
+            # plt.savefig(path_results + '/validation/single_plots/' + df_table_am_all['network'][ist] + '_' + df_table_am_all.index[ist]
+            #             + '_(' + str(ist) + ')' + '.png')
             plt.close(fig)
             stat_array_400m.append(stat_array_1)
             stat_array_1km.append(stat_array_2)
@@ -506,13 +514,13 @@ stn_slc_all_group = [np.where(stn_slc_all == stn_slc_all_unique[x]) for x in ran
 # SCAN: 211, 229, 254, 258, 272, 280, 298, 330, 352, 358
 # SNOTEL: 427, 454, 492, 520, 522, 583, 714, 721, 750, 755
 # USCRN: 914, 918, 920, 947, 952, 957, 961, 985, 1002, 1016
-network_name = ['SCAN', 'SNOTEL', 'USCRN']
-site_ind = [[211, 229, 254, 258, 272, 280, 298, 330, 352, 358], [427, 454, 492, 520, 522, 583, 714, 721, 750, 755],
+network_name = ['COSMOS', 'SCAN', 'SNOTEL', 'USCRN']
+site_ind = [[3, 9, 23, 36, 41, 44], [211, 229, 254, 258, 272, 280, 298, 330, 352, 358], [427, 454, 492, 520, 522, 583, 714, 721, 750, 755],
             [914, 918, 920, 947, 952, 957, 961, 985, 1002, 1016]]
 # network_name = list(stn_slc_all_unique)
 # site_ind = stn_slc_all_group
 
-for inw in range(len(site_ind)):
+for inw in range(1, len(site_ind)):
     fig = plt.figure(figsize=(11, 11))
     plt.subplots_adjust(left=0.1, right=0.95, bottom=0.08, top=0.92, hspace=0.25, wspace=0.25)
     for ist in range(len(site_ind[inw])):
@@ -556,7 +564,7 @@ for inw in range(len(site_ind)):
         conf_int_3 = std_err_3 * 1.96  # From the Z-value
         stat_array_3 = [number_3, r_sq_3, ubrmse_3, bias_3, p_value_3, conf_int_3]
 
-        ax = fig.add_subplot(5, 2, ist+1)
+        ax = fig.add_subplot(len(site_ind[inw])//2, 2, ist+1)
         sc1 = ax.scatter(x, y1, s=20, c='m', marker='s', label='400 m')
         sc2 = ax.scatter(x, y2, s=20, c='b', marker='o', label='1 km')
         sc3 = ax.scatter(x, y3, s=20, c='g', marker='^', label='9 km')
@@ -576,6 +584,7 @@ for inw in range(len(site_ind)):
     # add all legends together
     handles = [sc1] + [sc2] + [sc3]
     labels = [l.get_label() for l in handles]
+    # leg = plt.legend([sc1, sc2, sc3], labels, loc=(-0.6, 3.55), mode="expand", borderaxespad=0, ncol=3, prop={"size": 13})
     leg = plt.legend([sc1, sc2, sc3], labels, loc=(-0.6, 6.1), mode="expand", borderaxespad=0, ncol=3, prop={"size": 13})
 
     fig.text(0.52, 0.01, 'In Situ SM ($\mathregular{m^3/m^3)}$', ha='center', fontsize=16, fontweight='bold')
@@ -647,9 +656,9 @@ gpm_precip_ext = np.concatenate((gpm_precip_ext, gpm_precip_ext_all), axis=1)
 #             [860, 861, 870, 872, 896, 897, 904, 908], [918, 926, 961, 991, 1000, 1002, 1012, 1016]]
 # network_name = ['COSMOS', 'SCAN', 'SOILSCAPE', 'USCRN']
 
-network_name = ['SCAN', 'SNOTEL', 'USCRN']
-site_ind = [[229, 254, 282, 331, 352], [492, 520, 629, 714, 721],
-            [947, 978, 985, 1002, 1016]]
+network_name = ['COSMOS', 'SCAN', 'SNOTEL', 'USCRN']
+site_ind = [[9, 23, 36, 41, 44], [229, 254, 280, 330, 352], [492, 520, 522, 714, 721],
+            [947, 957, 985, 1002, 1016]]
 
 # Find the indices from df_gpm_precip
 # df_gpm_precip_ind = [df_gpm_precip.index.get_loc(df_table_am_all.index[site_ind[y][x]]) for y in range(len(site_ind)) for x in range(len(site_ind[y]))]
@@ -719,7 +728,32 @@ df_stats = pd.read_csv(path_results + '/validation/stat_all.csv', index_col=0)
 stn_coords_ind = [np.where(df_coords.index == df_stats.index[x])[0][0] for x in range(len(df_stats))]
 stn_lat = [df_coords.iloc[x]['lat'] for x in range(len(df_stats))]
 stn_lon = [df_coords.iloc[x]['lon'] for x in range(len(df_stats))]
+df_coords_slc = df_table_am_all.iloc[stn_coords_ind]
+site_ind = [[3, 9, 23, 36, 41, 44], [211, 229, 254, 258, 272, 280, 298, 330, 352, 358], [427, 454, 492, 520, 522, 583, 714, 721, 750, 755],
+            [914, 918, 920, 947, 952, 957, 961, 985, 1002, 1016]]
+site_ind_flat = list(itertools.chain(*site_ind))
+site_ind_name = df_table_am_all.iloc[site_ind_flat]
+site_ind_name = site_ind_name['network']
+df_stats_slc_ind = [np.where(df_stats.index == site_ind_name.index[x])[0][0] for x in range(len(site_ind_flat))]
+df_stats_slc = df_stats.iloc[df_stats_slc_ind]
+df_stats_slc_full = pd.concat([site_ind_name, df_stats_slc], axis=1)
 
+# Write to file
+writer_stn = pd.ExcelWriter(path_results + '/validation/stat_stn.xlsx')
+df_stats_slc_full.to_excel(writer_stn)
+writer_stn.save()
+
+# Write coordinates and network to files
+# df_coords_full = pd.concat([df_table_am_all['network'].to_frame().reset_index(drop=True, inplace=True),
+#                             df_coords.reset_index(drop=True, inplace=True)], axis=1)
+
+df_coords.iloc[ind_slc_all].to_csv(path_results + '/df_coords.csv', index=True)
+df_table_am_all_slc = df_table_am_all.iloc[ind_slc_all]
+df_network = df_table_am_all_slc['network'].to_frame()
+df_network.to_csv(path_results + '/df_network.csv', index=True)
+
+
+# Make the maps
 # Extract state name and center coordinates
 shp_records = Reader(path_gis_data + '/cb_2015_us_state_500k/cb_2015_us_state_500k.shp').records()
 shp_records = list(shp_records)
@@ -739,96 +773,85 @@ c_rmse_1km = df_stats['ubrmse_1km'].tolist()
 c_rsq_9km = df_stats['r_sq_9km'].tolist()
 c_rmse_9km = df_stats['ubrmse_9km'].tolist()
 
+
+# R^2
+fig = plt.figure(figsize=(10, 12), dpi=100, facecolor='w', edgecolor='k')
+plt.subplots_adjust(left=0.05, right=0.88, bottom=0.05, top=0.95, hspace=0.1, wspace=0.1)
 # 400 m
-fig = plt.figure(figsize=(10, 8), dpi=100, facecolor='w', edgecolor='k')
-plt.subplots_adjust(left=0.05, right=0.99, bottom=0.05, top=0.9, hspace=0.1, wspace=0.1)
-# Plot 1
-ax1 = fig.add_subplot(2, 1, 1, projection=ccrs.PlateCarree())
+ax1 = fig.add_subplot(3, 1, 1, projection=ccrs.PlateCarree())
 ax1.set_extent([-125, -67, 25, 50], ccrs.PlateCarree())
 ax1.add_feature(shape_conus)
-sc = ax1.scatter(stn_lon, stn_lat, c=c_rsq_400m, s=40, marker='^', edgecolors='k', cmap='jet')
-sc.set_clim(vmin=0, vmax=1)
-cbar = plt.colorbar(sc, extend='both')
-ax1.text(-123, 27, '$\mathregular{R^2}$', fontsize=13, fontweight='bold')
-# cbar.set_label('$\mathregular{R^2}$')
+sc1 = ax1.scatter(stn_lon, stn_lat, c=c_rsq_400m, s=40, marker='^', edgecolors='k', cmap='jet')
+sc1.set_clim(vmin=0, vmax=1)
+ax1.text(-123, 27, '400 m', fontsize=16, fontweight='bold')
 for x in range(len(shp_records)):
     ax1.annotate(s=state_name[x], xy=name_coords[x][0], horizontalalignment='center')
-# Plot 2
-ax2 = fig.add_subplot(2, 1, 2, projection=ccrs.PlateCarree())
-ax2.set_extent([-125, -67, 25, 50], ccrs.PlateCarree())
-ax2.add_feature(shape_conus)
-sc = ax2.scatter(stn_lon, stn_lat, c=c_rmse_400m, s=40, marker='^', edgecolors='k', cmap='jet')
-sc.set_clim(vmin=0,vmax=0.3)
-cbar = plt.colorbar(sc, extend='both')
-ax2.text(-123, 27, 'RMSE', fontsize=13, fontweight='bold')
-cbar.set_label('$\mathregular{(m^3/m^3)}$')
-for x in range(len(shp_records)):
-    ax2.annotate(s=state_name[x], xy=name_coords[x][0], horizontalalignment='center')
-
-plt.suptitle('400 m', fontsize=19, y=0.97, fontweight='bold')
-plt.savefig(path_results + '/validation/' + '400m_stats_map.png')
-plt.close(fig)
-
-
-
 # 1 km
-fig = plt.figure(figsize=(10, 8), dpi=100, facecolor='w', edgecolor='k')
-plt.subplots_adjust(left=0.05, right=0.99, bottom=0.05, top=0.9, hspace=0.1, wspace=0.1)
-# Plot 1
-ax1 = fig.add_subplot(2, 1, 1, projection=ccrs.PlateCarree())
-ax1.set_extent([-125, -67, 25, 50], ccrs.PlateCarree())
-ax1.add_feature(shape_conus)
-sc = ax1.scatter(stn_lon, stn_lat, c=c_rsq_1km, s=40, marker='^', edgecolors='k', cmap='jet')
-sc.set_clim(vmin=0,vmax=1)
-cbar = plt.colorbar(sc, extend='both')
-# cbar.set_label('$\mathregular{R^2}$')
-ax1.text(-123, 27, '$\mathregular{R^2}$', fontsize=13, fontweight='bold')
-for x in range(len(shp_records)):
-    ax1.annotate(s=state_name[x], xy=name_coords[x][0], horizontalalignment='center')
-# Plot 2
-ax2 = fig.add_subplot(2, 1, 2, projection=ccrs.PlateCarree())
+ax2 = fig.add_subplot(3, 1, 2, projection=ccrs.PlateCarree())
 ax2.set_extent([-125, -67, 25, 50], ccrs.PlateCarree())
 ax2.add_feature(shape_conus)
-sc = ax2.scatter(stn_lon, stn_lat, c=c_rmse_1km, s=40, marker='^', edgecolors='k', cmap='jet')
-sc.set_clim(vmin=0, vmax=0.3)
-cbar = plt.colorbar(sc, extend='both')
-ax2.text(-123, 27, 'RMSE', fontsize=13, fontweight='bold')
-cbar.set_label('$\mathregular{(m^3/m^3)}$')
+sc2 = ax2.scatter(stn_lon, stn_lat, c=c_rsq_1km, s=40, marker='^', edgecolors='k', cmap='jet')
+sc2.set_clim(vmin=0, vmax=1)
+ax2.text(-123, 27, '1 km', fontsize=16, fontweight='bold')
 for x in range(len(shp_records)):
     ax2.annotate(s=state_name[x], xy=name_coords[x][0], horizontalalignment='center')
+# 9 km
+ax3 = fig.add_subplot(3, 1, 3, projection=ccrs.PlateCarree())
+ax3.set_extent([-125, -67, 25, 50], ccrs.PlateCarree())
+ax3.add_feature(shape_conus)
+sc3 = ax3.scatter(stn_lon, stn_lat, c=c_rsq_9km, s=40, marker='^', edgecolors='k', cmap='jet')
+sc3.set_clim(vmin=0, vmax=1)
+ax3.text(-123, 27, '9 km', fontsize=16, fontweight='bold')
+for x in range(len(shp_records)):
+    ax3.annotate(s=state_name[x], xy=name_coords[x][0], horizontalalignment='center')
 
-plt.suptitle('1 km', fontsize=19, y=0.97, fontweight='bold')
-plt.savefig(path_results + '/validation/' + '1km_stats_map.png')
+cbar_ax = fig.add_axes([0.9, 0.2, 0.02, 0.6])
+cbar = fig.colorbar(sc3, cax=cbar_ax, extend='both')
+cbar.ax.locator_params(nbins=5)
+cbar.ax.tick_params(labelsize=14)
+plt.suptitle('$\mathregular{R^2}$', fontsize=20, y=0.98, fontweight='bold')
+plt.savefig(path_results + '/validation/' + 'r2_map.png')
 plt.close(fig)
 
-# 9 km
-fig = plt.figure(figsize=(10, 8), dpi=100, facecolor='w', edgecolor='k')
-plt.subplots_adjust(left=0.05, right=0.99, bottom=0.05, top=0.9, hspace=0.1, wspace=0.1)
-# Plot 1
-ax1 = fig.add_subplot(2, 1, 1, projection=ccrs.PlateCarree())
+# RMSE
+fig = plt.figure(figsize=(10, 12), dpi=100, facecolor='w', edgecolor='k')
+plt.subplots_adjust(left=0.05, right=0.88, bottom=0.05, top=0.95, hspace=0.1, wspace=0.1)
+# 400 m
+ax1 = fig.add_subplot(3, 1, 1, projection=ccrs.PlateCarree())
 ax1.set_extent([-125, -67, 25, 50], ccrs.PlateCarree())
 ax1.add_feature(shape_conus)
-sc = ax1.scatter(stn_lon, stn_lat, c=c_rsq_9km, s=40, marker='^', edgecolors='k', cmap='jet')
-sc.set_clim(vmin=0,vmax=1)
-cbar = plt.colorbar(sc, extend='both')
-# cbar.set_label('$\mathregular{R^2}$')
-ax1.text(-123, 27, '$\mathregular{R^2}$', fontsize=13, fontweight='bold')
+sc1 = ax1.scatter(stn_lon, stn_lat, c=c_rmse_400m, s=40, marker='^', edgecolors='k', cmap='jet')
+sc1.set_clim(vmin=0, vmax=0.3)
+ax1.text(-123, 27, '400 m', fontsize=16, fontweight='bold')
 for x in range(len(shp_records)):
     ax1.annotate(s=state_name[x], xy=name_coords[x][0], horizontalalignment='center')
-# Plot 2
-ax2 = fig.add_subplot(2, 1, 2, projection=ccrs.PlateCarree())
+# 1 km
+ax2 = fig.add_subplot(3, 1, 2, projection=ccrs.PlateCarree())
 ax2.set_extent([-125, -67, 25, 50], ccrs.PlateCarree())
 ax2.add_feature(shape_conus)
-sc = ax2.scatter(stn_lon, stn_lat, c=c_rmse_9km, s=40, marker='^', edgecolors='k', cmap='jet')
-sc.set_clim(vmin=0, vmax=0.3)
-cbar = plt.colorbar(sc, extend='both')
-ax2.text(-123, 27, 'RMSE', fontsize=13, fontweight='bold')
-cbar.set_label('$\mathregular{(m^3/m^3)}$')
+sc2 = ax2.scatter(stn_lon, stn_lat, c=c_rmse_1km, s=40, marker='^', edgecolors='k', cmap='jet')
+sc2.set_clim(vmin=0, vmax=0.3)
+ax2.text(-123, 27, '1 km', fontsize=16, fontweight='bold')
 for x in range(len(shp_records)):
     ax2.annotate(s=state_name[x], xy=name_coords[x][0], horizontalalignment='center')
+# 9 km
+ax3 = fig.add_subplot(3, 1, 3, projection=ccrs.PlateCarree())
+ax3.set_extent([-125, -67, 25, 50], ccrs.PlateCarree())
+ax3.add_feature(shape_conus)
+sc3 = ax3.scatter(stn_lon, stn_lat, c=c_rmse_9km, s=40, marker='^', edgecolors='k', cmap='jet')
+sc3.set_clim(vmin=0, vmax=0.3)
+ax3.text(-123, 27, '9 km', fontsize=16, fontweight='bold')
+for x in range(len(shp_records)):
+    ax3.annotate(s=state_name[x], xy=name_coords[x][0], horizontalalignment='center')
 
-plt.suptitle('9 km', fontsize=19, y=0.97, fontweight='bold')
-plt.savefig(path_results + '/validation/' + '9km_stats_map.png')
+cbar_ax = fig.add_axes([0.9, 0.2, 0.02, 0.6])
+cbar = fig.colorbar(sc3, cax=cbar_ax, extend='both')
+cbar.set_label('$\mathregular{(m^3/m^3)}$', fontsize=14)
+cbar.ax.locator_params(nbins=6)
+cbar.ax.tick_params(labelsize=14)
+
+plt.suptitle('RMSE', fontsize=20, y=0.98, fontweight='bold')
+plt.savefig(path_results + '/validation/' + 'rmse_map.png')
 plt.close(fig)
 
 
@@ -847,8 +870,9 @@ stdev_9km = np.array(df_stats['stdev_9km'])
 rmse_9km = np.array(df_stats['ubrmse_9km'])
 r_9km = np.array(np.sqrt(df_stats['r_sq_9km']))
 
-# 400 m
+
 fig = plt.figure(figsize=(7, 14), dpi=100, facecolor='w', edgecolor='k')
+# 400 m
 plt.subplots_adjust(left=0.05, right=0.99, bottom=0.05, top=0.9, hspace=0.2, wspace=0.2)
 ax1 = fig.add_subplot(3, 1, 1)
 sm.taylor_diagram(stdev_400m, rmse_400m, r_400m, markerColor='k', markerSize=10, alpha=0.0, markerLegend='off',
