@@ -23,6 +23,7 @@ from cartopy.io.shapereader import Reader
 from cartopy.feature import ShapelyFeature
 from cartopy.mpl.gridliner import LONGITUDE_FORMATTER, LATITUDE_FORMATTER
 from itertools import chain
+from sklearn import preprocessing
 
 # Ignore runtime warning
 import warnings
@@ -205,6 +206,10 @@ path_processed = '/Volumes/MyPassport/SMAP_Project/Datasets/processed_data'
 path_smap_sm_ds = '/Volumes/MyPassport/SMAP_Project/Datasets/SMAP/1km/gldas'
 # Path of processed data 2
 path_processed_2 = '/Users/binfang/Downloads/Processing/processed_data'
+# Path of GPM
+path_gpm = '/Volumes/MyPassport/SMAP_Project/Datasets/GPM'
+# Path of ISMN
+path_ismn = '/Volumes/MyPassport/SMAP_Project/Datasets/ISMN/processed_data'
 
 lst_folder = '/MYD11A1/'
 ndvi_folder = '/MYD13A2/'
@@ -1455,17 +1460,18 @@ plt.close()
 
 ########################################################################################################################
 # 4. Make time series plots
-# Daly: -14.1592,131.3881, tropical
-# Gnangara: -31.3767,115.7132, Mediterranean
-# Robsons Creek: -17.1200,145.6300, tropical
 # Weany Creek: -19.8820,146.5360, tropical savanna
-# Yanco: -35.0050,146.2992, semi-arid
+# Gnangara: -31.3767,115.7132, Mediterranean
+# Cheverelis: -35.00535, 146.30988, semi-arid
 # Temora: -34.4046,147.5326, semi-arid
 # Tumbarumba: -35.6560,148.1520, temperate maritime climate
 # Tullochgorum: -41.6694,147.9117,  temperate climate
+# (Daly: -14.1592,131.3881, tropical)
+# (Robsons Creek: -17.1200,145.6300, tropical)
+# (Yanco: -35.0050,146.2992, semi-arid)
 
-stn_lat_all = [-14.1592, -31.3497, -17.1200, -19.8820, -35.0050, -34.4046, -35.6560, -41.6694]
-stn_lon_all = [131.3881, 115.9068, 145.6300, 146.5360, 146.2992, 147.5326, 148.1520, 147.9117]
+stn_lat_all = [-19.8820, -31.3497, -35.00535, -34.4046, -35.6560, -41.6694]
+stn_lon_all = [146.5360, 115.9068, 146.3099, 147.5326, 148.1520, 147.9117]
 
 # 4.1 Locate positions of in-situ stations using lat/lon tables of Australia
 
@@ -1559,7 +1565,7 @@ sm_stn_avg_all = np.array(sm_stn_avg_all)
 
 
 # 4.3.4 Extract GPM data
-f_gpm = h5py.File(path_model+ "/gpm/gpm_precip_2019.hdf5", "r")
+f_gpm = h5py.File(path_gpm + "/gpm_precip_2019.hdf5", "r")
 varname_list_gpm = list(f_gpm.keys())
 
 for x in range(len(varname_list_gpm)):
@@ -1602,24 +1608,24 @@ gpm_precip_sum = np.array(gpm_precip_sum)
 
 
 # 4.4 Make time-series plot
-stn_name_all = ['Daly', 'Gnangara', 'Robsons Creek', 'Weany Creek', 'Yanco', 'Temora', 'Tumbarumba', 'Tullochgorum']
+stn_name_all = ['Weany Creek', 'Gnangara', 'Cheverelis', 'Temora', 'Tumbarumba', 'Tullochgorum']
 
-fig = plt.figure(figsize=(14, 12))
+fig = plt.figure(figsize=(14, 9))
 # fig.subplots_adjust(hspace=0.2, wspace=0.2)
-for ist in range(8):
+for ist in range(6):
 
-    x = sm_stn_avg_all[:, ist]*100
+    # x = sm_stn_avg_all[:, ist]*100
     y1 = swdi_stn_avg_all[:, ist]
     y2 = smai_stn_all[:, ist]
     z = gpm_precip_sum[:, ist]
 
     ax = fig.add_subplot(4, 2, ist+1)
 
-    xmask = ~np.isnan(x)
+    # xmask = ~np.isnan(x)
     y1mask = ~np.isnan(y1)
     y2mask = ~np.isnan(y2)
 
-    lns1 = ax.plot(x[xmask], c='k', marker='s', label='SM', markersize=5)
+    # lns1 = ax.plot(x[xmask], c='k', marker='s', label='SM', markersize=5)
     lns2 = ax.plot(y1[y1mask], c='m', marker='s', label='SWDI', markersize=5)
     lns3 = ax.plot(y2[y2mask], c='b', marker='o', label='SMDI', markersize=5)
 
@@ -1628,31 +1634,32 @@ for ist in range(8):
     ax.set_xticklabels(['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], fontsize=12)
     ax.grid(linestyle='--')
     # plt.ylim(-30, 50, 3)
-    ax.set_ylim(-30, 50, 3)
+    ax.set_ylim(-30, 30, 3)
     ax.set_yticks(np.arange(-30, 70, 20))
     # plt.grid(linestyle='--')
     ax.tick_params(axis='y', labelsize=12)
-    ax.text(10, 40, stn_name_all[ist], fontsize=12)
+    ax.text(11.5, 40, stn_name_all[ist], fontsize=12, horizontalalignment='right')
 
     ax2 = ax.twinx()
     ax2.set_ylim(0, 80, 3)
     ax2.set_yticks(np.arange(0, 100, 20))
     ax2.invert_yaxis()
-    lns4 = ax2.bar(np.arange(len(x)), z, width = 0.8, color='royalblue', label='Precip', alpha=0.5)
+    lns4 = ax2.bar(np.arange(len(y1)), z, width=0.8, color='royalblue', label='P', alpha=0.5)
     ax2.tick_params(axis='y', labelsize=12)
 
 # add all legends together
-handles = lns1+lns2+lns3+[lns4]
+# handles = lns1+lns2+lns3+[lns4]
+handles = lns2+lns3+[lns4]
 labels = [l.get_label() for l in handles]
 
-handles, labels = ax.get_legend_handles_labels()
-plt.gca().legend(handles, labels, loc='center left', bbox_to_anchor=(1.05, 4.5))
+# handles, labels = ax.get_legend_handles_labels()
+plt.gca().legend(handles, labels, loc='center left', bbox_to_anchor=(1.05, 3.7))
 
-fig.text(0.51, 0.01, 'Months', ha='center', fontsize=16, fontweight='bold')
-fig.text(0.04, 0.4, 'Drought Indicators', rotation='vertical', fontsize=16, fontweight='bold')
-fig.text(0.95, 0.4, 'GPM Precip (mm)', rotation='vertical', fontsize=16, fontweight='bold')
-plt.subplots_adjust(left=0.1, right=0.9, bottom=0.07, top=0.95, hspace=0.2, wspace=0.2)
-# plt.suptitle('Danube River Basin', fontsize=19, y=0.97, fontweight='bold')
+fig.text(0.51, 0.05, 'Months', ha='center', fontsize=16, fontweight='bold')
+fig.text(0.04, 0.42, 'Drought Indicators', rotation='vertical', fontsize=16, fontweight='bold')
+fig.text(0.95, 0.42, 'GPM Precip (mm)', rotation='vertical', fontsize=16, fontweight='bold')
+plt.subplots_adjust(left=0.1, right=0.9, bottom=-0.15, top=0.95, hspace=0.4, wspace=0.2)
+
 plt.savefig(path_results + '/t-series1' + '.png')
 plt.close(fig)
 
@@ -1755,7 +1762,7 @@ smap_md_weekly_spdev_group = [smap_md_weekly_spdev[x*7:x*7+7, ].ravel() for x in
 
 
 # 5.1.3 Extract GPM data
-f_gpm = h5py.File(path_model + "/gpm/gpm_precip_2019.hdf5", "r")
+f_gpm = h5py.File(path_gpm + "/gpm_precip_2019.hdf5", "r")
 varname_list_gpm = list(f_gpm.keys())
 
 for x in range(len(varname_list_gpm)):
@@ -1814,9 +1821,9 @@ ax[2].tick_params(axis="y", labelsize=13)
 ax[2].grid(linestyle='--')
 # ax[2].set_title('Precipitation', fontsize=15, position=(0.1, 0.85))
 
-fig.text(0.03, 0.12, 'Precipitation', rotation='vertical', fontsize=18, fontweight='bold')
+fig.text(0.03, 0.1, 'Precipitation (mm)', rotation='vertical', fontsize=18, fontweight='bold')
 fig.text(0.03, 0.5, 'SWDI', rotation='vertical', fontsize=18, fontweight='bold')
-fig.text(0.03, 0.8, 'SM', rotation='vertical', fontsize=18, fontweight='bold')
+fig.text(0.03, 0.77, 'SM ($\mathregular{m^3/m^3)}$', rotation='vertical', fontsize=18, fontweight='bold')
 fig.text(0.51, 0.01, 'Weeks', ha='center', fontsize=18, fontweight='bold')
 plt.subplots_adjust(left=0.1, right=0.95, bottom=0.08, top=0.95, hspace=0.25, wspace=0.25)
 plt.show()
@@ -1846,9 +1853,9 @@ ax[2].tick_params(axis="y", labelsize=13)
 ax[2].grid(linestyle='--')
 # ax[2].set_title('Precipitation', fontsize=15, position=(0.1, 0.85))
 
-fig.text(0.03, 0.12, 'Precipitation($\sigma$)', rotation='vertical', fontsize=18, fontweight='bold')
+fig.text(0.03, 0.09, 'Precipitation($\sigma$)(mm)', rotation='vertical', fontsize=18, fontweight='bold')
 fig.text(0.03, 0.48, 'SWDI($\sigma$)', rotation='vertical', fontsize=18, fontweight='bold')
-fig.text(0.03, 0.8, 'SM($\sigma$)', rotation='vertical', fontsize=18, fontweight='bold')
+fig.text(0.03, 0.76, 'SM($\sigma$)($\mathregular{m^3/m^3)}$', rotation='vertical', fontsize=18, fontweight='bold')
 fig.text(0.51, 0.01, 'Weeks', ha='center', fontsize=18, fontweight='bold')
 plt.subplots_adjust(left=0.1, right=0.95, bottom=0.08, top=0.95, hspace=0.25, wspace=0.25)
 plt.savefig(path_results + '/boxplot_spdev' + '.png')
@@ -1956,11 +1963,11 @@ plt.savefig(path_results + '/boxplot_spdev' + '.png')
 plt.close(fig)
 
 ########################################################################################################################
-# 6. Validation (Monthly plots)
+# 6. Validation (Monthly/daily plots)
 
 # 6.1. Compare monthly 1 km SM, in-situ SM, SWDI, SMAI at 19 ISMN sites.
 # 6.1.0. Load the site lat/lon from excel files and Locate the SM positions by lat/lon of in-situ data
-ismn_list = sorted(glob.glob(path_processed + '/[A-Z]*.xlsx'))
+ismn_list = sorted(glob.glob(path_ismn + '/[A-Z]*.xlsx'))
 coords_all = []
 df_table_am_all = []
 df_table_pm_all = []
@@ -2028,7 +2035,96 @@ ismn_sm_monthly = np.stack(ismn_sm_monthly, axis=1)
 ismn_sm_monthly = ismn_sm_monthly[:, :-1]
 ismn_sm_monthly = np.transpose(ismn_sm_monthly, (1, 0))
 
-# 6.1.2. Extract 1 km SMAP by lat/lon
+# 6.1.2. Extract 1 km SMAP by lat/lon (daily)
+smap_ext_allyear = []
+for iyr in range(len(yearname)):
+    os.chdir(path_aus_soil + '/smap_1km/' + str(yearname[iyr]))
+    tif_files = sorted(glob.glob('*.tif'))
+    tif_files_month = np.asarray([(datetime.datetime(yearname[iyr], 1, 1) +
+                                   datetime.timedelta(int(os.path.basename(tif_files[x]).split('.')[0][-3:]) - 1)).month - 1
+                                  for x in range(len(tif_files))])
+    tif_files_month_ind = [np.where(tif_files_month == x)[0] for x in range(12)]
+
+    smap_ext_1year = []
+    for imo in range(len(tif_files_month_ind)):
+        smap_ext_1month = []
+        if len(tif_files_month_ind[imo]) != 0:
+            for idt in range(len(tif_files_month_ind[imo])):
+                smap_file = gdal.Open(tif_files[tif_files_month_ind[imo][idt]])
+                smap_file = smap_file.ReadAsArray().astype(np.float32)
+                smap_ext = smap_file[stn_row_1km_ind_all, stn_col_1km_ind_all]
+                smap_ext_1month.append(smap_ext)
+                print(tif_files[tif_files_month_ind[imo][idt]])
+
+            smap_ext_1year.append(smap_ext_1month)
+            del (smap_ext_1month)
+        else:
+            pass
+
+    smap_ext_allyear.append(smap_ext_1year)
+
+    del(smap_ext_1year)
+
+smap_ext_allyear = list(chain.from_iterable(smap_ext_allyear))
+for ils in range(len(smap_ext_allyear)):
+    smap_ext_allyear[ils] = np.stack(smap_ext_allyear[ils], axis=0)
+    smap_ext_allyear[ils] = np.transpose(smap_ext_allyear[ils], (1, 0))
+
+ismn_sm_all_split.remove(ismn_sm_all_split[-1])
+
+
+# Average ISMN/SMAP SM to monthly
+ismn_sm_slc = []
+smap_sm_slc = []
+for imo in range(len(smap_ext_allyear)):
+    ismn_sm_1month = []
+    smap_sm_1month = []
+
+    for ist in range(19):
+        ismn_ind = np.where(~np.isnan(ismn_sm_all_split[imo][ist, :]))
+        smap_ind = np.where(~np.isnan(smap_ext_allyear[imo][ist, :]))
+        if len(ismn_ind) != 0 and len(smap_ind) != 0:
+            # nonnan_ind = np.where(~np.isnan(ismn_sm_all_split[imo][ist, :]) & ~np.isnan(smap_ext_allyear[imo][ist, :]))[
+            #     0]
+            nonnan_ind = np.intersect1d(ismn_ind, smap_ind)
+            ismn_sm_pt = np.nanmean(ismn_sm_all_split[imo][ist, nonnan_ind])
+            smap_sm_pt = np.nanmean(smap_ext_allyear[imo][ist, nonnan_ind])
+        else:
+            ismn_sm_pt = np.nan
+            smap_sm_pt = np.nan
+
+        ismn_sm_1month.append(ismn_sm_pt)
+        smap_sm_1month.append(smap_sm_pt)
+        del(ismn_ind, smap_ind, nonnan_ind, ismn_sm_pt, smap_sm_pt)
+
+    ismn_sm_1month = np.stack(ismn_sm_1month)
+    smap_sm_1month = np.stack(smap_sm_1month)
+
+    ismn_sm_slc.append(ismn_sm_1month)
+    smap_sm_slc.append(smap_sm_1month)
+    del(ismn_sm_1month, smap_sm_1month)
+
+ismn_sm_slc = np.stack(ismn_sm_slc, axis=1)
+smap_sm_slc = np.stack(smap_sm_slc, axis=1)
+
+# Save ISMN and matched SMAP SM data
+# ismn_sm_md = np.transpose(ismn_sm_monthly, (1, 0))
+# smap_sm_md = np.transpose(smap_ismn_allyear, (1, 0))
+# ismn_sm_md = ismn_sm_md[:, 1:]
+
+columns = [str(yearname[x]) + '_' + monthname[y] for x in range(len(yearname)) for y in range(len(monthname))]
+columns = columns[3:]
+
+df_ismn_sm_md = pd.DataFrame(ismn_sm_slc, columns=columns, index=list(df_coords.index))
+df_smap_sm_md = pd.DataFrame(smap_sm_slc, columns=columns, index=list(df_coords.index))
+writer = pd.ExcelWriter('/Users/binfang/Downloads/smap_ismn_sm.xlsx')
+df_ismn_sm_md.to_excel(writer, sheet_name='ISMN')
+df_smap_sm_md.to_excel(writer, sheet_name='SMAP')
+writer.save()
+
+
+
+# 6.1.3. Extract 1 km SMAP by lat/lon and average to monthly
 smap_ext_allyear = []
 smap_md_allyear = []
 smap_md_spdev_allyear = []
@@ -2107,7 +2203,10 @@ with h5py.File('smap_1km_md.hdf5', 'w') as f:
         f.create_dataset(x, data=eval(x))
 f.close()
 
-# 6.1.3. Extract the SWDI data / SMAI data
+
+
+
+# 6.1.4. Extract the SWDI data / SMAI data
 f = h5py.File("/Volumes/MyPassport/SMAP_Project/Datasets/Australia/smap_1km_md.hdf5", "r")
 varname_list = ['smap_ismn_allyear', 'smap_sm_allyear']
 for x in range(len(varname_list)):
@@ -2150,18 +2249,18 @@ stn_name_all = list(df_coords.index)
 # Figure 1
 fig = plt.figure(figsize=(14, 12))
 for ist in range(10):
-    x = ismn_sm_monthly[:, ist]*100
+    # x = ismn_sm_monthly[:, ist]*100
     y1 = swdi_monthly[:, ist]
     y2 = smai_monthly[:, ist]
-    z = ismn_sm_monthly[:, ist]
+    # z = ismn_sm_monthly[:, ist]
 
     ax = fig.add_subplot(5, 2, ist+1)
 
-    lns1 = ax.plot(x, c='k', marker='s', label='SM', markersize=4)
+    # lns1 = ax.plot(x, c='k', marker='s', label='SM', markersize=4)
     lns2 = ax.plot(y1, c='m', marker='s', label='SWDI', markersize=4)
     lns3 = ax.plot(y2, c='b', marker='o', label='SMDI', markersize=4)
 
-    plt.xlim(0, len(x))
+    plt.xlim(0, len(y1))
     ax.set_xticks(np.arange(0, 60, 12)+12)
     ax.set_xticklabels([])
     labels = ['2015', '2016', '2017', '2018', '2019']
@@ -2183,11 +2282,11 @@ for ist in range(10):
     # ax2.tick_params(axis='y', labelsize=10)
 
 # add all legends together
-handles = lns1+lns2+lns3
+handles = lns2+lns3
 labels = [l.get_label() for l in handles]
 
 handles, labels = ax.get_legend_handles_labels()
-plt.gca().legend(handles, labels, loc='center left', bbox_to_anchor=(1, 5.8))
+plt.gca().legend(handles, labels, loc='center left', bbox_to_anchor=(1, 5.9))
 
 fig.text(0.51, 0.01, 'Years', ha='center', fontsize=18, fontweight='bold')
 fig.text(0.01, 0.4, 'Drought Indicators', rotation='vertical', fontsize=18, fontweight='bold')
@@ -2200,18 +2299,18 @@ plt.close(fig)
 # Figure 2
 fig = plt.figure(figsize=(14, 12))
 for ist in range(10, 19):
-    x = ismn_sm_monthly[:, ist]*100
+    # x = ismn_sm_monthly[:, ist]*100
     y1 = swdi_monthly[:, ist]
     y2 = smai_monthly[:, ist]
-    z = ismn_sm_monthly[:, ist]
+    # z = ismn_sm_monthly[:, ist]
 
     ax = fig.add_subplot(5, 2, ist-9)
 
-    lns1 = ax.plot(x, c='k', marker='s', label='SM', markersize=4)
+    # lns1 = ax.plot(x, c='k', marker='s', label='SM', markersize=4)
     lns2 = ax.plot(y1, c='m', marker='s', label='SWDI', markersize=4)
     lns3 = ax.plot(y2, c='b', marker='o', label='SMDI', markersize=4)
 
-    plt.xlim(0, len(x))
+    plt.xlim(0, len(y1))
     ax.set_xticks(np.arange(0, 60, 12)+12)
     ax.set_xticklabels([])
     labels = ['2015', '2016', '2017', '2018', '2019']
@@ -2233,11 +2332,11 @@ for ist in range(10, 19):
     # ax2.tick_params(axis='y', labelsize=10)
 
 # add all legends together
-handles = lns1+lns2+lns3
+handles = lns2+lns3
 labels = [l.get_label() for l in handles]
 
 handles, labels = ax.get_legend_handles_labels()
-plt.gca().legend(handles, labels, loc='center left', bbox_to_anchor=(2.25, 5.8))
+plt.gca().legend(handles, labels, loc='center left', bbox_to_anchor=(2.25, 5.9))
 
 fig.text(0.51, 0.01, 'Years', ha='center', fontsize=16, fontweight='bold')
 fig.text(0.01, 0.4, 'Drought Indicators', rotation='vertical', fontsize=16, fontweight='bold')
@@ -2336,7 +2435,7 @@ swdi_md_spdev_allyear_ls = [[]] * 4 + swdi_md_spdev_allyear_ls
 
 
 # 6.4.2 Extract GPM data
-os.chdir(path_model + '/gpm/')
+os.chdir(path_gpm)
 gpm_files = sorted(glob.glob('*.hdf5'))
 
 gpm_precip_md_allyear = []
@@ -2420,9 +2519,9 @@ ax[2].set_xticklabels(labels, minor=True)
 ax[2].grid(linestyle='--')
 # ax[2].set_title('Precipitation', fontsize=15, position=(0.1, 0.85))
 
-fig.text(0.02, 0.13, 'Precipitation', rotation='vertical', fontsize=18, fontweight='bold')
+fig.text(0.02, 0.1, 'Precipitation (mm)', rotation='vertical', fontsize=18, fontweight='bold')
 fig.text(0.02, 0.5, 'SWDI', rotation='vertical', fontsize=18, fontweight='bold')
-fig.text(0.02, 0.81, 'SM', rotation='vertical', fontsize=18, fontweight='bold')
+fig.text(0.02, 0.78, 'SM ($\mathregular{m^3/m^3)}$', rotation='vertical', fontsize=18, fontweight='bold')
 fig.text(0.52, 0.01, 'Years', ha='center', fontsize=18, fontweight='bold')
 plt.subplots_adjust(left=0.08, right=0.96, bottom=0.08, top=0.96, hspace=0.25, wspace=0.25)
 plt.savefig(path_results + '/boxplot_allyear_1' + '.png')
@@ -2468,9 +2567,9 @@ ax[2].set_xticklabels(labels, minor=True)
 ax[2].grid(linestyle='--')
 # ax[2].set_title('Precipitation', fontsize=15, position=(0.1, 0.85))
 
-fig.text(0.02, 0.13, 'Precipitation($\sigma$)', rotation='vertical', fontsize=18, fontweight='bold')
+fig.text(0.02, 0.09, 'Precipitation($\sigma$)(mm)', rotation='vertical', fontsize=18, fontweight='bold')
 fig.text(0.02, 0.5, 'SWDI($\sigma$)', rotation='vertical', fontsize=18, fontweight='bold')
-fig.text(0.02, 0.81, 'SM($\sigma$)', rotation='vertical', fontsize=18, fontweight='bold')
+fig.text(0.02, 0.77, 'SM($\sigma$)($\mathregular{m^3/m^3)}$', rotation='vertical', fontsize=18, fontweight='bold')
 fig.text(0.52, 0.01, 'Years', ha='center', fontsize=18, fontweight='bold')
 plt.subplots_adjust(left=0.1, right=0.96, bottom=0.08, top=0.96, hspace=0.25, wspace=0.25)
 plt.savefig(path_results + '/boxplot_allyear_2' + '.png')
@@ -2486,11 +2585,12 @@ ismn_sm = pd.read_excel(path_processed_2+'/smap_ismn_sm.xlsx', sheet_name='ISMN'
 smap_sm_1km = pd.read_excel(path_processed_2+'/smap_ismn_sm.xlsx', sheet_name='SMAP', index_col=0)
 
 ismn_sm_arr = np.copy(sm_mat_init)
-ismn_sm_arr[:, 4:44] = np.array(ismn_sm)[:, 0:40]
+ismn_sm_arr[:, 3:44] = np.array(ismn_sm)[:, 0:41]
 smap_sm_1km_arr = np.copy(sm_mat_init)
-smap_sm_1km_arr[:, 4:44] = np.array(smap_sm_1km)[:, 0:40]
+smap_sm_1km_arr[:, 3:44] = np.array(smap_sm_1km)[:, 0:41]
 
 stn_name_all = list(ismn_sm.index)
+
 
 # Figure 1
 fig = plt.figure(figsize=(14, 12))
@@ -2510,11 +2610,11 @@ for ist in range(10):
     ax.set_xticks(mticks+6, minor=True)
     ax.tick_params(axis='x', which='minor', length=0, labelsize=14)
     ax.set_xticklabels(labels, minor=True)
-    plt.ylim(0, 0.5)
-    ax.set_yticks(np.arange(0, 0.6, 0.1))
+    plt.ylim(0, 0.6)
+    ax.set_yticks(np.arange(0, 0.8, 0.2))
     ax.tick_params(axis='y', labelsize=14)
     ax.grid(linestyle='--')
-    ax.text(48, 0.44, stn_name_all[ist].replace('_', ' '), fontsize=16, horizontalalignment='right')
+    ax.text(48, 0.5, stn_name_all[ist].replace('_', ' '), fontsize=16, horizontalalignment='right')
 
 # add all legends together
 handles = lns1+lns2
@@ -2548,11 +2648,11 @@ for ist in range(10, 19):
     ax.set_xticks(mticks+6, minor=True)
     ax.tick_params(axis='x', which='minor', length=0, labelsize=14)
     ax.set_xticklabels(labels, minor=True)
-    plt.ylim(0, 0.5)
-    ax.set_yticks(np.arange(0, 0.6, 0.1))
+    plt.ylim(0, 0.6)
+    ax.set_yticks(np.arange(0, 0.8, 0.2))
     ax.tick_params(axis='y', labelsize=14)
     ax.grid(linestyle='--')
-    ax.text(48, 0.44, stn_name_all[ist].replace('_', ' '), fontsize=16, horizontalalignment='right')
+    ax.text(48, 0.5, stn_name_all[ist].replace('_', ' '), fontsize=16, horizontalalignment='right')
 
 # add all legends together
 handles = lns1+lns2
