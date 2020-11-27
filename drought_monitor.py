@@ -210,6 +210,8 @@ path_processed_2 = '/Users/binfang/Downloads/Processing/processed_data'
 path_gpm = '/Volumes/MyPassport/SMAP_Project/Datasets/GPM'
 # Path of ISMN
 path_ismn = '/Volumes/MyPassport/SMAP_Project/Datasets/ISMN/processed_data'
+# Path of GLDAS
+path_gldas = '/Volumes/MyPassport/SMAP_Project/Datasets/GLDAS'
 
 lst_folder = '/MYD11A1/'
 ndvi_folder = '/MYD13A2/'
@@ -899,7 +901,7 @@ sm_gldas_split_all[0][2][~np.isnan(sm_gldas_split_all[0][2])] = np.nan
 sm_gldas_split_all[0][3][~np.isnan(sm_gldas_split_all[0][3])] = np.nan
 sm_gldas_split_all[0][3][~np.isnan(sm_gldas_split_all[0][3])] = np.nan
 
-# Generate 2d SM data by year
+# Generate 2d SM yearly data
 sm_gldas_25km_all = []
 for iyr in range(len(yearname)-1):
     sm_gldas_year = []
@@ -919,7 +921,7 @@ for iyr in range(len(yearname)-1):
 
 sm_gldas_25km_all = np.stack(sm_gldas_25km_all, axis=2)
 
-# Save the raster of monthly stats
+# Save the raster of yearly stats
 out_ds_tiff = gdal.GetDriverByName('GTiff').Create(path_aus_soil + '/sm_gldas_25km_all.tif',
      len(lon_aus_ease_25km), len(lat_aus_ease_25km), sm_gldas_25km_all.shape[2],  # Number of bands
      gdal.GDT_Float32, ['COMPRESS=LZW', 'TILED=YES'])
@@ -930,6 +932,48 @@ for idl in range(sm_gldas_25km_all.shape[2]):
     out_ds_tiff.GetRasterBand(idl + 1).SetNoDataValue(0)
 out_ds_tiff = None  # close dataset to write to disc
 del(out_ds_tiff)
+
+
+# Generate 2d SM monthly data
+sm_gldas_25km_all_monthly = []
+for iyr in range(len(yearname)-1):
+    sm_gldas_year = []
+    for imo in range(len(monthnum)):
+        sm_gldas_1month = sm_gldas_split_all[imo][iyr]
+        sm_gldas_1month = np.nanmean(sm_gldas_1month, axis=1)
+        # sm_gldas_year = np.concatenate(sm_gldas_year, axis=1)
+        # sm_gldas_year = np.nanmean(sm_gldas_year, axis=1)
+        sm_gldas_25km = np.copy(sm_25km_init)
+        sm_gldas_25km[row_lmask_ease_25km_ind[lmask_ease_25km_aus_ind], col_lmask_ease_25km_ind[lmask_ease_25km_aus_ind]] \
+            = sm_gldas_1month
+        sm_gldas_25km = sm_gldas_25km[row_aus_ease_25km_ind[0]:row_aus_ease_25km_ind[-1] + 1,
+                        col_aus_ease_25km_ind[0]:col_aus_ease_25km_ind[-1] + 1]
+
+        sm_gldas_year.append(sm_gldas_25km)
+        del(sm_gldas_25km, sm_gldas_1month)
+
+    sm_gldas_25km_all_monthly.append(sm_gldas_year)
+    del(sm_gldas_year)
+
+sm_gldas_25km_all_monthly = np.stack(sm_gldas_25km_all_monthly, axis=2)
+sm_gldas_25km_all_monthly = np.transpose(sm_gldas_25km_all_monthly, (2, 0, 1, 3))
+sm_shape = sm_gldas_25km_all_monthly.shape
+sm_gldas_25km_all_monthly_trans = np.reshape(sm_gldas_25km_all_monthly, [sm_shape[0]*sm_shape[1], sm_shape[2], sm_shape[3]])
+sm_gldas_25km_all_monthly_trans = np.transpose(sm_gldas_25km_all_monthly_trans, (1, 2, 0))
+
+# Save the raster of monthly stats
+out_ds_tiff = gdal.GetDriverByName('GTiff').Create(path_aus_soil + '/sm_gldas_25km_all_monthly.tif',
+     len(lon_aus_ease_25km), len(lat_aus_ease_25km), sm_gldas_25km_all_monthly_trans.shape[2],  # Number of bands
+     gdal.GDT_Float32, ['COMPRESS=LZW', 'TILED=YES'])
+
+# Loop write each band to Geotiff file
+for idl in range(sm_gldas_25km_all_monthly_trans.shape[2]):
+    out_ds_tiff.GetRasterBand(idl + 1).WriteArray(sm_gldas_25km_all_monthly_trans[:, :, idl])
+    out_ds_tiff.GetRasterBand(idl + 1).SetNoDataValue(0)
+out_ds_tiff = None  # close dataset to write to disc
+del(out_ds_tiff)
+
+
 
 
 # 3.3.1 Load in SMAP 1 km SM
@@ -1089,7 +1133,7 @@ for iyr in range(len(yearname)):
     sm_defi_mat_all_avg_notnan = np.where(~np.isnan(sm_defi_mat_all_avg))[0][0].item()
     month_diff = np.setdiff1d(np.arange(12), np.where(~np.isnan(sm_defi_mat_all_avg))[0])
 
-    # Calculate the monthly SMDI
+    # Calculate the monthly SMAI
     smai_all = np.empty([len(lat_aus_ease_1km), len(lon_aus_ease_1km), len(monthname)], dtype='float32')
     smai_all[:] = np.nan
     if sm_defi_mat_all_avg_notnan == 0:
@@ -1360,7 +1404,7 @@ plt.savefig(path_results + '/smai_allyear_md.png')
 
 sm_smap_1km_all_read = rasterio.open(path_aus_soil + '/sm_smap_1km_all.tif').read()
 sm_gldas_25km_all_read = rasterio.open(path_aus_soil + '/sm_gldas_25km_all.tif').read()
-f = h5py.File("/Users/binfang/Downloads/Processing/GLDAS/ds_gldas_ease_2019.hdf5", "r")
+f = h5py.File(path_gldas + '/ds_gldas_ease_2019.hdf5', "r")
 varname_list = ['sm_gldas_am_ease_2019', 'sm_gldas_pm_ease_2019']
 for x in range(len(varname_list)):
     var_obj = f[varname_list[x]][()]
@@ -1403,10 +1447,12 @@ for ily in range(5):
 
 sm_smap_1km_all_read_agg = np.stack(sm_smap_1km_all_read_agg)
 
+sm_smap_delta = sm_smap_1km_all_read_agg - sm_gldas_25km_all_read
 
 shape_world = ShapelyFeature(Reader(path_gis_data + '/gshhg-shp-2.3.7/GSHHS_shp/f/GSHHS_f_L1.shp').geometries(),
                                 ccrs.PlateCarree(), edgecolor='black', facecolor='none')
 
+# Map 1 (with aggregation)
 xx_wrd, yy_wrd = np.meshgrid(lon_aus_ease_25km, lat_aus_ease_25km) # Create the map matrix
 title_content = ['2015', '2016', '2017', '2018', '2019']
 columns = 2
@@ -1458,6 +1504,83 @@ plt.savefig(path_results + '/sm_compare_1.png')
 plt.close()
 
 
+# Map 2
+xx_wrd_1km, yy_wrd_1km = np.meshgrid(lon_aus_ease_1km, lat_aus_ease_1km) # Create the map matrix
+xx_wrd_25km, yy_wrd_25km = np.meshgrid(lon_aus_ease_25km, lat_aus_ease_25km) # Create the map matrix
+
+title_content = ['2015', '2016', '2017', '2018', '2019']
+columns = 3
+rows = 5
+fig = plt.figure(figsize=(12, 15), facecolor='w', edgecolor='k')
+plt.subplots_adjust(left=0.1, right=0.93, bottom=0.08, top=0.92, hspace=0.25, wspace=0.2)
+for ipt in range(5):
+    ax1 = fig.add_subplot(rows, columns, ipt*3+1, projection=ccrs.PlateCarree(),
+                         extent=[lon_aus_ease_1km[0], lon_aus_ease_1km[-1], lat_aus_ease_1km[-1], lat_aus_ease_1km[0]])
+    ax1.add_feature(shape_world, linewidth=0.5)
+    img1 = ax1.pcolormesh(xx_wrd_1km, yy_wrd_1km, sm_smap_1km_all_read[ipt, :, :], vmin=0, vmax=0.4, cmap='coolwarm_r')
+    gl = ax1.gridlines(draw_labels=True, linestyle='--', linewidth=0.5, alpha=0.5, color='black')
+    gl.xlocator = mticker.MultipleLocator(base=10)
+    gl.ylocator = mticker.MultipleLocator(base=10)
+    gl.xlabel_style = {'size': 11}
+    gl.ylabel_style = {'size': 11}
+    gl.xformatter = LONGITUDE_FORMATTER
+    gl.yformatter = LATITUDE_FORMATTER
+    # ax1.text(117, -39, title_content[ipt], fontsize=18, horizontalalignment='left',
+    #         verticalalignment='top', weight='bold')
+
+    ax2 = fig.add_subplot(rows, columns, ipt*3+2, projection=ccrs.PlateCarree(),
+                         extent=[lon_aus_ease_25km[0], lon_aus_ease_25km[-1], lat_aus_ease_25km[-1], lat_aus_ease_25km[0]])
+    ax2.add_feature(shape_world, linewidth=0.5)
+    img2 = ax2.pcolormesh(xx_wrd_25km, yy_wrd_25km, sm_gldas_25km_all_read[ipt, :, :], vmin=0, vmax=0.4, cmap='coolwarm_r')
+    gl = ax2.gridlines(draw_labels=True, linestyle='--', linewidth=0.5, alpha=0.5, color='black')
+    gl.xlocator = mticker.MultipleLocator(base=10)
+    gl.ylocator = mticker.MultipleLocator(base=10)
+    gl.xlabel_style = {'size': 11}
+    gl.ylabel_style = {'size': 11}
+    gl.xformatter = LONGITUDE_FORMATTER
+    gl.yformatter = LATITUDE_FORMATTER
+    # ax2.text(117, -39, title_content[ipt], fontsize=18, horizontalalignment='left',
+    #         verticalalignment='top', weight='bold')
+
+    ax3 = fig.add_subplot(rows, columns, ipt*3+3, projection=ccrs.PlateCarree(),
+                         extent=[lon_aus_ease_25km[0], lon_aus_ease_25km[-1], lat_aus_ease_25km[-1], lat_aus_ease_25km[0]])
+    ax3.add_feature(shape_world, linewidth=0.5)
+    img3 = ax3.pcolormesh(xx_wrd_25km, yy_wrd_25km, sm_smap_delta[ipt, :, :], vmin=-0.2, vmax=0.2, cmap='bwr_r')
+    gl = ax3.gridlines(draw_labels=True, linestyle='--', linewidth=0.5, alpha=0.5, color='black')
+    gl.xlocator = mticker.MultipleLocator(base=10)
+    gl.ylocator = mticker.MultipleLocator(base=10)
+    gl.xlabel_style = {'size': 11}
+    gl.ylabel_style = {'size': 11}
+    gl.xformatter = LONGITUDE_FORMATTER
+    gl.yformatter = LATITUDE_FORMATTER
+    # ax2.text(117, -39, title_content[ipt], fontsize=18, horizontalalignment='left',
+    #         verticalalignment='top', weight='bold')
+
+fig.text(0.05, 0.85, '2015', ha='center', fontsize=16, fontweight='bold')
+fig.text(0.05, 0.67, '2016', ha='center', fontsize=16, fontweight='bold')
+fig.text(0.05, 0.49, '2017', ha='center', fontsize=16, fontweight='bold')
+fig.text(0.05, 0.30, '2018', ha='center', fontsize=16, fontweight='bold')
+fig.text(0.05, 0.12, '2019', ha='center', fontsize=16, fontweight='bold')
+fig.text(0.23, 0.95, 'SMAP', ha='center', fontsize=18, fontweight='bold')
+fig.text(0.52, 0.95, 'GLDAS', ha='center', fontsize=18, fontweight='bold')
+fig.text(0.81, 0.95, 'Difference', ha='center', fontsize=18, fontweight='bold')
+cbar_ax1 = fig.add_axes([0.13, 0.04, 0.2, 0.01])
+cbar1 = fig.colorbar(img1, cax=cbar_ax1, extend='both', orientation='horizontal')
+cbar1.ax.locator_params(nbins=5)
+cbar1.set_label('$\mathregular{(m^3/m^3)}$', fontsize=10, x=0.95, labelpad=2)
+cbar_ax2 = fig.add_axes([0.42, 0.04, 0.2, 0.01])
+cbar2 = fig.colorbar(img2, cax=cbar_ax2, extend='both', orientation='horizontal')
+cbar2.ax.locator_params(nbins=5)
+cbar2.set_label('$\mathregular{(m^3/m^3)}$', fontsize=10, x=0.95, labelpad=2)
+cbar_ax3 = fig.add_axes([0.71, 0.04, 0.2, 0.01])
+cbar3 = fig.colorbar(img3, cax=cbar_ax3, extend='both', orientation='horizontal')
+cbar3.ax.locator_params(nbins=5)
+cbar3.set_label('$\mathregular{(m^3/m^3)}$', fontsize=10, x=0.95, labelpad=2)
+plt.show()
+plt.savefig(path_results + '/sm_compare_1_new.png', dpi=300)
+plt.close()
+
+
 ########################################################################################################################
 # 4. Make time series plots
 # Weany Creek: -19.8820,146.5360, tropical savanna
@@ -1483,6 +1606,7 @@ for idt in range(len(stn_lat_all)):
     stn_row_1km_ind_all.append(stn_row_1km_ind)
     stn_col_1km_ind_all.append(stn_col_1km_ind)
     del(stn_row_1km_ind, stn_col_1km_ind)
+
 
 # 4.2 Locate positions of in-situ stations using lat/lon tables of the world
 
@@ -1556,6 +1680,7 @@ with h5py.File(path_aus_soil +'/sm_stn_all_2019.hdf5', 'w') as f:
         f.create_dataset(x, data=eval(x))
 f.close()
 
+# Read the SMAP SM
 f_smap = h5py.File(path_aus_soil + "/sm_stn_all_2019.hdf5", "r")
 varname_list = list(f_smap.keys())
 sm_stn_all = f_smap[varname_list[0]][()]
@@ -1610,6 +1735,7 @@ gpm_precip_sum = np.array(gpm_precip_sum)
 # 4.4 Make time-series plot
 stn_name_all = ['Weany Creek', 'Gnangara', 'Cheverelis', 'Temora', 'Tumbarumba', 'Tullochgorum']
 
+# Together
 fig = plt.figure(figsize=(14, 9))
 # fig.subplots_adjust(hspace=0.2, wspace=0.2)
 for ist in range(6):
@@ -1663,6 +1789,114 @@ plt.subplots_adjust(left=0.1, right=0.9, bottom=-0.15, top=0.95, hspace=0.4, wsp
 plt.savefig(path_results + '/t-series1' + '.png')
 plt.close(fig)
 
+
+# SWDI
+fig = plt.figure(figsize=(14, 9))
+# fig.subplots_adjust(hspace=0.2, wspace=0.2)
+for ist in range(6):
+
+    # x = sm_stn_avg_all[:, ist]*100
+    y1 = swdi_stn_avg_all[:, ist]
+    # y2 = smai_stn_all[:, ist]
+    z = gpm_precip_sum[:, ist]
+
+    ax = fig.add_subplot(4, 2, ist+1)
+
+    # xmask = ~np.isnan(x)
+    y1mask = ~np.isnan(y1)
+    # y2mask = ~np.isnan(y2)
+
+    # lns1 = ax.plot(x[xmask], c='k', marker='s', label='SM', markersize=5)
+    lns2 = ax.plot(y1[y1mask], c='m', marker='s', label='SWDI', markersize=5)
+    # lns3 = ax.plot(y2[y2mask], c='b', marker='o', label='SMDI', markersize=5)
+
+    plt.xlim(-1, len(y1))
+    ax.set_xticks(np.arange(12))
+    ax.set_xticklabels(['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], fontsize=12)
+    ax.grid(linestyle='--')
+    # plt.ylim(-30, 50, 3)
+    ax.set_ylim(-30, 30, 3)
+    ax.set_yticks(np.arange(-30, 45, 15))
+    # plt.grid(linestyle='--')
+    ax.tick_params(axis='y', labelsize=12)
+    ax.text(11.5, 20, stn_name_all[ist], fontsize=12, horizontalalignment='right')
+
+    ax2 = ax.twinx()
+    ax2.set_ylim(0, 80, 3)
+    ax2.set_yticks(np.arange(0, 100, 20))
+    ax2.invert_yaxis()
+    lns4 = ax2.bar(np.arange(len(y1)), z, width=0.8, color='royalblue', label='P', alpha=0.5)
+    ax2.tick_params(axis='y', labelsize=12)
+
+# add all legends together
+# handles = lns1+lns2+lns3+[lns4]
+handles = lns2+[lns4]
+labels = [l.get_label() for l in handles]
+
+# handles, labels = ax.get_legend_handles_labels()
+plt.gca().legend(handles, labels, loc='center left', bbox_to_anchor=(1.05, 3.7))
+
+fig.text(0.51, 0.05, 'Months', ha='center', fontsize=16, fontweight='bold')
+fig.text(0.04, 0.42, 'SWDI', rotation='vertical', fontsize=16, fontweight='bold')
+fig.text(0.95, 0.42, 'GPM Precip (mm)', rotation='vertical', fontsize=16, fontweight='bold')
+plt.subplots_adjust(left=0.1, right=0.9, bottom=-0.15, top=0.95, hspace=0.4, wspace=0.2)
+
+plt.savefig(path_results + '/t-series1_swdi' + '.png')
+plt.close(fig)
+
+# SMDI
+fig = plt.figure(figsize=(14, 9))
+# fig.subplots_adjust(hspace=0.2, wspace=0.2)
+for ist in range(6):
+
+    # x = sm_stn_avg_all[:, ist]*100
+    # y1 = swdi_stn_avg_all[:, ist]
+    y2 = smai_stn_all[:, ist]
+    z = gpm_precip_sum[:, ist]
+
+    ax = fig.add_subplot(4, 2, ist+1)
+
+    # xmask = ~np.isnan(x)
+    # y1mask = ~np.isnan(y1)
+    y2mask = ~np.isnan(y2)
+
+    # lns1 = ax.plot(x[xmask], c='k', marker='s', label='SM', markersize=5)
+    # lns2 = ax.plot(y1[y1mask], c='m', marker='s', label='SWDI', markersize=5)
+    lns3 = ax.plot(y2[y2mask], c='b', marker='s', label='SMDI', markersize=5)
+
+    plt.xlim(-1, len(y2))
+    ax.set_xticks(np.arange(12))
+    ax.set_xticklabels(['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], fontsize=12)
+    ax.grid(linestyle='--')
+    # plt.ylim(-30, 50, 3)
+    ax.set_ylim(-6, 10, 3)
+    ax.set_yticks(np.arange(-6, 12, 4))
+    # plt.grid(linestyle='--')
+    ax.tick_params(axis='y', labelsize=12)
+    ax.text(11.5, 7, stn_name_all[ist], fontsize=12, horizontalalignment='right')
+
+    ax2 = ax.twinx()
+    ax2.set_ylim(0, 80, 3)
+    ax2.set_yticks(np.arange(0, 100, 20))
+    ax2.invert_yaxis()
+    lns4 = ax2.bar(np.arange(len(y2)), z, width=0.8, color='royalblue', label='P', alpha=0.5)
+    ax2.tick_params(axis='y', labelsize=12)
+
+# add all legends together
+# handles = lns1+lns2+lns3+[lns4]
+handles = lns3+[lns4]
+labels = [l.get_label() for l in handles]
+
+# handles, labels = ax.get_legend_handles_labels()
+plt.gca().legend(handles, labels, loc='center left', bbox_to_anchor=(1.05, 3.7))
+
+fig.text(0.51, 0.05, 'Months', ha='center', fontsize=16, fontweight='bold')
+fig.text(0.04, 0.42, 'SMDI', rotation='vertical', fontsize=16, fontweight='bold')
+fig.text(0.95, 0.42, 'GPM Precip (mm)', rotation='vertical', fontsize=16, fontweight='bold')
+plt.subplots_adjust(left=0.1, right=0.9, bottom=-0.15, top=0.95, hspace=0.4, wspace=0.2)
+
+plt.savefig(path_results + '/t-series1_smdi' + '.png')
+plt.close(fig)
 
 
 ########################################################################################################################
@@ -1998,7 +2232,7 @@ stn_lat_all = np.array(df_coords['lat'])
 stn_lon_all = np.array(df_coords['lon'])
 
 # Locate positions of in-situ stations using lat/lon tables of Australia
-
+# 1 km
 stn_row_1km_ind_all = []
 stn_col_1km_ind_all = []
 for idt in range(len(stn_lat_all)):
@@ -2018,6 +2252,16 @@ for idt in range(len(stn_lat_all)):
     stn_row_1km_ind_world_all.append(stn_row_1km_ind)
     stn_col_1km_ind_world_all.append(stn_col_1km_ind)
     del(stn_row_1km_ind, stn_col_1km_ind)
+
+# 25 km
+stn_row_25km_ind_all = []
+stn_col_25km_ind_all = []
+for idt in range(len(stn_lat_all)):
+    stn_row_25km_ind = np.argmin(np.absolute(stn_lat_all[idt] - lat_aus_ease_25km)).item()
+    stn_col_25km_ind = np.argmin(np.absolute(stn_lon_all[idt] - lon_aus_ease_25km)).item()
+    stn_row_25km_ind_all.append(stn_row_25km_ind)
+    stn_col_25km_ind_all.append(stn_col_25km_ind)
+    del(stn_row_25km_ind, stn_col_25km_ind)
 
 
 # 6.1.1. Calculate the monthly averaged in-situ SM
@@ -2107,6 +2351,33 @@ for imo in range(len(smap_ext_allyear)):
 ismn_sm_slc = np.stack(ismn_sm_slc, axis=1)
 smap_sm_slc = np.stack(smap_sm_slc, axis=1)
 
+
+# 6.1.3. Extract GLDAS data by lat/lon
+gldas_sm_monthly = gdal.Open(path_aus_soil + '/sm_gldas_25km_all_monthly.tif')
+gldas_sm_monthly = gldas_sm_monthly.ReadAsArray()
+
+gldas_ext_all = []
+for imo in range(gldas_sm_monthly.shape[0]):
+    # gldas_ext_1month = []
+    # smap_file = gdal.Open(tif_files[tif_files_month_ind[imo][idt]])
+    # smap_file = smap_file.ReadAsArray().astype(np.float32)
+    gldas_ext = gldas_sm_monthly[imo, stn_row_25km_ind_all, stn_col_25km_ind_all]
+    # gldas_ext_1month.append(gldas_ext)
+    gldas_ext_all.append(gldas_ext)
+
+    # print(imo)
+    del(gldas_ext)
+
+# Reorganize the extracted GLDAS data by station
+gldas_sm_slc = np.empty([df_coords.shape[0], len(gldas_ext_all)+12], dtype='float32')
+gldas_sm_slc[:] = np.nan
+
+for ist in range(gldas_sm_slc.shape[0]):
+    for imo in range(gldas_sm_slc.shape[1]-12):
+        gldas_sm_slc[ist, imo] = gldas_ext_all[imo][ist]
+
+gldas_sm_slc = gldas_sm_slc[:, 3:]
+
 # Save ISMN and matched SMAP SM data
 # ismn_sm_md = np.transpose(ismn_sm_monthly, (1, 0))
 # smap_sm_md = np.transpose(smap_ismn_allyear, (1, 0))
@@ -2122,9 +2393,13 @@ df_ismn_sm_md.to_excel(writer, sheet_name='ISMN')
 df_smap_sm_md.to_excel(writer, sheet_name='SMAP')
 writer.save()
 
+df_gldas_sm_md = pd.DataFrame(gldas_sm_slc, columns=columns, index=list(df_coords.index))
+writer_gldas = pd.ExcelWriter('/Users/binfang/Downloads/gldas_sm.xlsx')
+df_gldas_sm_md.to_excel(writer_gldas, sheet_name='GLDAS')
+writer_gldas.save()
 
 
-# 6.1.3. Extract 1 km SMAP by lat/lon and average to monthly
+# 6.1.4. Extract 1 km SMAP by lat/lon and average to monthly
 smap_ext_allyear = []
 smap_md_allyear = []
 smap_md_spdev_allyear = []
@@ -2206,7 +2481,7 @@ f.close()
 
 
 
-# 6.1.4. Extract the SWDI data / SMAI data
+# 6.1.5. Extract the SWDI data / SMAI data
 f = h5py.File("/Volumes/MyPassport/SMAP_Project/Datasets/Australia/smap_1km_md.hdf5", "r")
 varname_list = ['smap_ismn_allyear', 'smap_sm_allyear']
 for x in range(len(varname_list)):
@@ -2246,7 +2521,8 @@ ismn_sm_monthly = np.concatenate((swdi_monthly[:3, :], ismn_sm_monthly), axis=0)
 # 6.2. Make time-series plot
 stn_name_all = list(df_coords.index)
 
-# Figure 1
+# 6.2.1
+# Figure 1 (Together)
 fig = plt.figure(figsize=(14, 12))
 for ist in range(10):
     # x = ismn_sm_monthly[:, ist]*100
@@ -2296,13 +2572,10 @@ plt.savefig(path_results + '/t-series1_monthly' + '.png')
 plt.close(fig)
 
 
-# Figure 2
+# Figure 2 (Together)
 fig = plt.figure(figsize=(14, 12))
 for ist in range(10, 19):
-    # x = ismn_sm_monthly[:, ist]*100
     y1 = swdi_monthly[:, ist]
-    y2 = smai_monthly[:, ist]
-    # z = ismn_sm_monthly[:, ist]
 
     ax = fig.add_subplot(5, 2, ist-9)
 
@@ -2345,6 +2618,228 @@ plt.subplots_adjust(left=0.08, right=0.92, bottom=0.08, top=0.94, hspace=0.25, w
 plt.savefig(path_results + '/t-series2_monthly' + '.png')
 plt.close(fig)
 
+
+# 6.2.2
+site_name = df_coords.index
+
+# Figure 1 (Separate)
+fig = plt.figure(figsize=(12, 8))
+
+y1 = swdi_monthly[:, 0]
+y2 = swdi_monthly[:, 4]
+y3 = swdi_monthly[:, 7]
+y4 = swdi_monthly[:, 8]
+y5 = swdi_monthly[:, 10]
+y6 = swdi_monthly[:, 11]
+y7 = swdi_monthly[:, 15]
+
+ax = fig.add_subplot(1, 1, 1)
+
+lns1 = ax.plot(y1, c='k', marker='s', label=site_name[0].replace('_', ' '), markersize=4)
+lns2 = ax.plot(y2, c='m', marker='s', label=site_name[4].replace('_', ' '), markersize=4)
+lns3 = ax.plot(y3, c='b', marker='s', label=site_name[7].replace('_', ' '), markersize=4)
+lns4 = ax.plot(y4, c='g', marker='s', label=site_name[8].replace('_', ' '), markersize=4)
+lns5 = ax.plot(y5, c='r', marker='s', label=site_name[10].replace('_', ' '), markersize=4)
+lns6 = ax.plot(y6, c='c', marker='s', label=site_name[11].replace('_', ' '), markersize=4)
+lns7 = ax.plot(y7, c='y', marker='s', label=site_name[15].replace('_', ' '), markersize=4)
+
+plt.xlim(0, len(y1))
+ax.set_xticks(np.arange(0, 60, 12)+12)
+ax.set_xticklabels([])
+labels = ['2015', '2016', '2017', '2018', '2019']
+mticks = ax.get_xticks()
+ax.set_xticks(mticks-6, minor=True)
+ax.tick_params(axis='x', which='minor', length=0, labelsize=14)
+ax.set_xticklabels(labels, minor=True)
+plt.ylim(-30, 50)
+ax.set_yticks(np.arange(-30, 70, 20))
+ax.tick_params(axis='y', labelsize=14)
+ax.grid(linestyle='--')
+
+# add all legends together
+handles = lns1+lns2+lns3+lns4+lns5+lns6+lns7
+labels = [l.get_label() for l in handles]
+
+handles, labels = ax.get_legend_handles_labels()
+plt.gca().legend(handles, labels, loc='upper right')
+# plt.gca().legend(handles, labels, loc='center left', bbox_to_anchor=(1, 5.9))
+
+fig.text(0.51, 0.01, 'Years', ha='center', fontsize=18, fontweight='bold')
+fig.text(0.01, 0.47, 'SWDI', rotation='vertical', fontsize=18, fontweight='bold')
+plt.subplots_adjust(left=0.08, right=0.92, bottom=0.08, top=0.94, hspace=0.25, wspace=0.25)
+# plt.suptitle('Danube River Basin', fontsize=19, y=0.97, fontweight='bold')
+plt.savefig(path_results + '/t-series1_monthly_new1' + '.png')
+plt.close(fig)
+
+
+# Figure 2 (Separate)
+fig = plt.figure(figsize=(12, 8))
+
+y1 = swdi_monthly[:, 1]
+y2 = swdi_monthly[:, 2]
+y3 = swdi_monthly[:, 3]
+y4 = swdi_monthly[:, 5]
+y5 = swdi_monthly[:, 6]
+y6 = swdi_monthly[:, 9]
+y7 = swdi_monthly[:, 12]
+y8 = swdi_monthly[:, 13]
+y9 = swdi_monthly[:, 14]
+y10 = swdi_monthly[:, 16]
+y11 = swdi_monthly[:, 17]
+y12 = swdi_monthly[:, 18]
+
+ax = fig.add_subplot(1, 1, 1)
+
+lns1 = ax.plot(y1, c='k', marker='s', label=site_name[1].replace('_', ' '), markersize=4)
+lns2 = ax.plot(y2, c='m', marker='s', label=site_name[2].replace('_', ' '), markersize=4)
+lns3 = ax.plot(y3, c='b', marker='s', label=site_name[3].replace('_', ' '), markersize=4)
+lns4 = ax.plot(y4, c='g', marker='s', label=site_name[5].replace('_', ' '), markersize=4)
+lns5 = ax.plot(y5, c='r', marker='s', label=site_name[6].replace('_', ' '), markersize=4)
+lns6 = ax.plot(y6, c='c', marker='s', label=site_name[9].replace('_', ' '), markersize=4)
+lns7 = ax.plot(y7, c='y', marker='s', label=site_name[12].replace('_', ' '), markersize=4)
+lns8 = ax.plot(y8, c='tab:brown', marker='s', label=site_name[13].replace('_', ' '), markersize=4)
+lns9 = ax.plot(y9, c='tab:purple', marker='s', label=site_name[14].replace('_', ' '), markersize=4)
+lns10 = ax.plot(y10, c='tab:orange', marker='s', label=site_name[16].replace('_', ' '), markersize=4)
+lns11 = ax.plot(y11, c='slategray', marker='s', label=site_name[17].replace('_', ' '), markersize=4)
+lns12 = ax.plot(y12, c='gold', marker='s', label=site_name[18].replace('_', ' '), markersize=4)
+
+plt.xlim(0, len(y1))
+ax.set_xticks(np.arange(0, 60, 12)+12)
+ax.set_xticklabels([])
+labels = ['2015', '2016', '2017', '2018', '2019']
+mticks = ax.get_xticks()
+ax.set_xticks(mticks-6, minor=True)
+ax.tick_params(axis='x', which='minor', length=0, labelsize=14)
+ax.set_xticklabels(labels, minor=True)
+plt.ylim(-30, 50)
+ax.set_yticks(np.arange(-30, 70, 20))
+ax.tick_params(axis='y', labelsize=14)
+ax.grid(linestyle='--')
+
+# add all legends together
+handles = lns1+lns2+lns3+lns4+lns5+lns6+lns7+lns8+lns9+lns10+lns11+lns12
+labels = [l.get_label() for l in handles]
+
+handles, labels = ax.get_legend_handles_labels()
+plt.gca().legend(handles, labels, loc='upper right')
+# plt.gca().legend(handles, labels, loc='center left', bbox_to_anchor=(1, 5.9))
+
+fig.text(0.51, 0.01, 'Years', ha='center', fontsize=18, fontweight='bold')
+fig.text(0.01, 0.47, 'SWDI', rotation='vertical', fontsize=18, fontweight='bold')
+plt.subplots_adjust(left=0.08, right=0.92, bottom=0.08, top=0.94, hspace=0.25, wspace=0.25)
+# plt.suptitle('Danube River Basin', fontsize=19, y=0.97, fontweight='bold')
+plt.savefig(path_results + '/t-series1_monthly_new2' + '.png')
+plt.close(fig)
+
+
+# Figure 3 (Separate)
+fig = plt.figure(figsize=(12, 8))
+
+y1 = smai_monthly[:, 0]
+y2 = smai_monthly[:, 4]
+y3 = smai_monthly[:, 7]
+y4 = smai_monthly[:, 8]
+y5 = smai_monthly[:, 10]
+y6 = smai_monthly[:, 11]
+y7 = smai_monthly[:, 15]
+
+ax = fig.add_subplot(1, 1, 1)
+
+lns1 = ax.plot(y1, c='k', marker='s', label=site_name[0].replace('_', ' '), markersize=4)
+lns2 = ax.plot(y2, c='m', marker='s', label=site_name[4].replace('_', ' '), markersize=4)
+lns3 = ax.plot(y3, c='b', marker='s', label=site_name[7].replace('_', ' '), markersize=4)
+lns4 = ax.plot(y4, c='g', marker='s', label=site_name[8].replace('_', ' '), markersize=4)
+lns5 = ax.plot(y5, c='r', marker='s', label=site_name[10].replace('_', ' '), markersize=4)
+lns6 = ax.plot(y6, c='c', marker='s', label=site_name[11].replace('_', ' '), markersize=4)
+lns7 = ax.plot(y7, c='y', marker='s', label=site_name[15].replace('_', ' '), markersize=4)
+
+plt.xlim(0, len(y1))
+ax.set_xticks(np.arange(0, 60, 12)+12)
+ax.set_xticklabels([])
+labels = ['2015', '2016', '2017', '2018', '2019']
+mticks = ax.get_xticks()
+ax.set_xticks(mticks-6, minor=True)
+ax.tick_params(axis='x', which='minor', length=0, labelsize=14)
+ax.set_xticklabels(labels, minor=True)
+plt.ylim(-6, 10)
+ax.set_yticks(np.arange(-6, 14, 4))
+ax.tick_params(axis='y', labelsize=14)
+ax.grid(linestyle='--')
+
+# add all legends together
+handles = lns1+lns2+lns3+lns4+lns5+lns6+lns7
+labels = [l.get_label() for l in handles]
+
+handles, labels = ax.get_legend_handles_labels()
+plt.gca().legend(handles, labels, loc='upper right')
+# plt.gca().legend(handles, labels, loc='center left', bbox_to_anchor=(1, 5.9))
+
+fig.text(0.51, 0.01, 'Years', ha='center', fontsize=18, fontweight='bold')
+fig.text(0.01, 0.47, 'SMDI', rotation='vertical', fontsize=18, fontweight='bold')
+plt.subplots_adjust(left=0.08, right=0.92, bottom=0.08, top=0.94, hspace=0.25, wspace=0.25)
+# plt.suptitle('Danube River Basin', fontsize=19, y=0.97, fontweight='bold')
+plt.savefig(path_results + '/t-series2_monthly_new1' + '.png')
+plt.close(fig)
+
+
+# Figure 4 (Separate)
+fig = plt.figure(figsize=(12, 8))
+
+y1 = smai_monthly[:, 1]
+y2 = smai_monthly[:, 2]
+y3 = smai_monthly[:, 3]
+y4 = smai_monthly[:, 5]
+y5 = smai_monthly[:, 6]
+y6 = smai_monthly[:, 9]
+y7 = smai_monthly[:, 12]
+y8 = smai_monthly[:, 13]
+y9 = smai_monthly[:, 14]
+y10 = smai_monthly[:, 16]
+y11 = smai_monthly[:, 17]
+y12 = smai_monthly[:, 18]
+
+ax = fig.add_subplot(1, 1, 1)
+
+lns1 = ax.plot(y1, c='k', marker='s', label=site_name[1].replace('_', ' '), markersize=4)
+lns2 = ax.plot(y2, c='m', marker='s', label=site_name[2].replace('_', ' '), markersize=4)
+lns3 = ax.plot(y3, c='b', marker='s', label=site_name[3].replace('_', ' '), markersize=4)
+lns4 = ax.plot(y4, c='g', marker='s', label=site_name[5].replace('_', ' '), markersize=4)
+lns5 = ax.plot(y5, c='r', marker='s', label=site_name[6].replace('_', ' '), markersize=4)
+lns6 = ax.plot(y6, c='c', marker='s', label=site_name[9].replace('_', ' '), markersize=4)
+lns7 = ax.plot(y7, c='y', marker='s', label=site_name[12].replace('_', ' '), markersize=4)
+lns8 = ax.plot(y8, c='tab:brown', marker='s', label=site_name[13].replace('_', ' '), markersize=4)
+lns9 = ax.plot(y9, c='tab:purple', marker='s', label=site_name[14].replace('_', ' '), markersize=4)
+lns10 = ax.plot(y10, c='tab:orange', marker='s', label=site_name[16].replace('_', ' '), markersize=4)
+lns11 = ax.plot(y11, c='slategray', marker='s', label=site_name[17].replace('_', ' '), markersize=4)
+lns12 = ax.plot(y12, c='gold', marker='s', label=site_name[18].replace('_', ' '), markersize=4)
+
+plt.xlim(0, len(y1))
+ax.set_xticks(np.arange(0, 60, 12)+12)
+ax.set_xticklabels([])
+labels = ['2015', '2016', '2017', '2018', '2019']
+mticks = ax.get_xticks()
+ax.set_xticks(mticks-6, minor=True)
+ax.tick_params(axis='x', which='minor', length=0, labelsize=14)
+ax.set_xticklabels(labels, minor=True)
+plt.ylim(-6, 10)
+ax.set_yticks(np.arange(-6, 14, 4))
+ax.tick_params(axis='y', labelsize=14)
+ax.grid(linestyle='--')
+
+# add all legends together
+handles = lns1+lns2+lns3+lns4+lns5+lns6+lns7+lns8+lns9+lns10+lns11+lns12
+labels = [l.get_label() for l in handles]
+
+handles, labels = ax.get_legend_handles_labels()
+plt.gca().legend(handles, labels, loc='upper right')
+# plt.gca().legend(handles, labels, loc='center left', bbox_to_anchor=(1, 5.9))
+
+fig.text(0.51, 0.01, 'Years', ha='center', fontsize=18, fontweight='bold')
+fig.text(0.01, 0.47, 'SMDI', rotation='vertical', fontsize=18, fontweight='bold')
+plt.subplots_adjust(left=0.08, right=0.92, bottom=0.08, top=0.94, hspace=0.25, wspace=0.25)
+# plt.suptitle('Danube River Basin', fontsize=19, y=0.97, fontweight='bold')
+plt.savefig(path_results + '/t-series2_monthly_new2' + '.png')
+plt.close(fig)
 
 
 ########################################################################################################################
@@ -2576,7 +3071,7 @@ plt.savefig(path_results + '/boxplot_allyear_2' + '.png')
 plt.close(fig)
 
 ########################################################################################################################
-# 6.6 Make time series plot between 1 km SMAP SM and ISMN SM
+# 6.6.1 Make time series plot between 1 km SMAP SM and ISMN SM
 
 sm_mat_init = np.empty([19, 48], dtype='float32')
 sm_mat_init[:] = np.nan
@@ -2669,6 +3164,105 @@ plt.savefig(path_results + '/t-series2_sm' + '.png')
 plt.close(fig)
 
 
+# 6.6.2 Make time series plot between 1 km SMAP SM, ISMN SM and GLDAS SM
+
+sm_mat_init = np.empty([19, 48], dtype='float32')
+sm_mat_init[:] = np.nan
+
+ismn_sm = pd.read_excel(path_processed_2+'/smap_ismn_gldas_sm.xlsx', sheet_name='ISMN', index_col=0)
+smap_sm_1km = pd.read_excel(path_processed_2+'/smap_ismn_gldas_sm.xlsx', sheet_name='SMAP', index_col=0)
+gldas_sm = pd.read_excel(path_processed_2+'/smap_ismn_gldas_sm.xlsx', sheet_name='GLDAS', index_col=0)
+
+ismn_sm_arr = np.copy(sm_mat_init)
+ismn_sm_arr[:, 3:44] = np.array(ismn_sm)[:, 0:41]
+smap_sm_1km_arr = np.copy(sm_mat_init)
+smap_sm_1km_arr[:, 3:44] = np.array(smap_sm_1km)[:, 0:41]
+gldas_sm_arr = np.copy(sm_mat_init)
+gldas_sm_arr[:, 3:44] = np.array(gldas_sm)[:, 0:41]
+
+stn_name_all = list(ismn_sm.index)
+
+
+# Figure 1
+fig = plt.figure(figsize=(14, 12))
+for ist in range(10):
+    x = ismn_sm_arr[ist, :]
+    y = smap_sm_1km_arr[ist, :]
+    z = gldas_sm_arr[ist, :]
+
+    ax = fig.add_subplot(5, 2, ist+1)
+    lns1 = ax.plot(x, c='k', marker='s', label='ISMN', markersize=4)
+    lns2 = ax.plot(y, c='m', marker='s', label='SMAP', markersize=4)
+    lns3 = ax.plot(z, c='b', marker='s', label='GLDAS', markersize=4)
+
+    plt.xlim(0, len(x))
+    ax.set_xticks(np.arange(0, 48, 12))
+    ax.set_xticklabels([])
+    labels = ['2015', '2016', '2017', '2018']
+    mticks = ax.get_xticks()
+    ax.set_xticks(mticks+6, minor=True)
+    ax.tick_params(axis='x', which='minor', length=0, labelsize=14)
+    ax.set_xticklabels(labels, minor=True)
+    plt.ylim(0, 0.6)
+    ax.set_yticks(np.arange(0, 0.8, 0.2))
+    ax.tick_params(axis='y', labelsize=14)
+    ax.grid(linestyle='--')
+    ax.text(48, 0.5, stn_name_all[ist].replace('_', ' '), fontsize=16, horizontalalignment='right')
+
+# add all legends together
+handles = lns1+lns2+lns3
+labels = [l.get_label() for l in handles]
+
+handles, labels = ax.get_legend_handles_labels()
+plt.gca().legend(handles, labels, loc='center left', bbox_to_anchor=(1, 5.9))
+
+fig.text(0.51, 0.02, 'Years', ha='center', fontsize=18, fontweight='bold')
+fig.text(0.01, 0.5, 'SM', rotation='vertical', fontsize=18, fontweight='bold')
+plt.subplots_adjust(left=0.08, right=0.92, bottom=0.08, top=0.94, hspace=0.25, wspace=0.25)
+# plt.suptitle('Danube River Basin', fontsize=19, y=0.97, fontweight='bold')
+plt.savefig(path_results + '/t-series1_sm_new' + '.png')
+plt.close(fig)
+
+
+# Figure 2
+fig = plt.figure(figsize=(14, 12))
+for ist in range(10, 19):
+    x = ismn_sm_arr[ist, :]
+    y = smap_sm_1km_arr[ist, :]
+    z = gldas_sm_arr[ist, :]
+
+    ax = fig.add_subplot(5, 2, ist-9)
+    lns1 = ax.plot(x, c='k', marker='s', label='ISMN', markersize=4)
+    lns2 = ax.plot(y, c='m', marker='s', label='SMAP', markersize=4)
+    lns3 = ax.plot(z, c='b', marker='s', label='GLDAS', markersize=4)
+
+    plt.xlim(0, len(x))
+    ax.set_xticks(np.arange(0, 48, 12))
+    ax.set_xticklabels([])
+    labels = ['2015', '2016', '2017', '2018']
+    mticks = ax.get_xticks()
+    ax.set_xticks(mticks+6, minor=True)
+    ax.tick_params(axis='x', which='minor', length=0, labelsize=14)
+    ax.set_xticklabels(labels, minor=True)
+    plt.ylim(0, 0.6)
+    ax.set_yticks(np.arange(0, 0.8, 0.2))
+    ax.tick_params(axis='y', labelsize=14)
+    ax.grid(linestyle='--')
+    ax.text(48, 0.5, stn_name_all[ist].replace('_', ' '), fontsize=16, horizontalalignment='right')
+
+# add all legends together
+handles = lns1+lns2+lns3
+labels = [l.get_label() for l in handles]
+
+handles, labels = ax.get_legend_handles_labels()
+plt.gca().legend(handles, labels, loc='center left', bbox_to_anchor=(2.25, 5.9))
+
+fig.text(0.51, 0.02, 'Years', ha='center', fontsize=18, fontweight='bold')
+fig.text(0.01, 0.5, 'SM', rotation='vertical', fontsize=18, fontweight='bold')
+plt.subplots_adjust(left=0.08, right=0.92, bottom=0.08, top=0.94, hspace=0.25, wspace=0.25)
+# plt.suptitle('Danube River Basin', fontsize=19, y=0.97, fontweight='bold')
+plt.savefig(path_results + '/t-series2_sm_new' + '.png')
+plt.close(fig)
 
 
 
